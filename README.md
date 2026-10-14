@@ -14,6 +14,9 @@ complete DNSSEC validation process itself.
 > intended architecture and development plan; it does not claim that
 > unverified components are already complete.
 
+## Youtube Link of Introductory video:
+https://youtu.be/FeKZ9_0cWfo
+
 ## Table of Contents
 
 -   [Problem](#problem)
