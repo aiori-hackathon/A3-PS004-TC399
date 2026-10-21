@@ -1,209 +1,317 @@
-# AegisDNS — local hackathon starter
+# AegisDNS
 
-A Dockerized prototype of **Authenticated Gateway-Assisted DNSSEC for Resource-Constrained IoT**. It includes a BIND9 authoritative server, an Unbound validating resolver, a mutual-TLS Python DNS-over-TLS gateway, a Node.js + Socket.io dashboard, an ESP32 Arduino sketch, and a host-side smoke test.
+**Authenticated Gateway-Assisted DNSSEC for Resource-Constrained IoT**  
+AIORI Hackathon 3 · PS-004 · IoT and Cloud Computing
 
-> **Status:** starter scaffold, not a production security product. You must run the DNSSEC checks below and confirm the three results before relying on the demo. In this lab, `SERVFAIL` is shown as `BOGUS` for the intentionally corrupted signature. A real resolver can return `SERVFAIL` for other causes too.
+AegisDNS is a lab prototype that lets a constrained IoT client send DNS queries through an authenticated DNS-over-TLS (DoT) gateway. The gateway forwards queries to a trusted Unbound resolver that validates DNSSEC, applies a policy to the result, and publishes telemetry to a live web dashboard.
 
-## What this package does
+> **Project status:** The local Docker-based DNSSEC lab and gateway test script have been exercised on Windows 11 with Docker Desktop. The following three resolver outcomes were observed: `valid.aegis.test` → `NOERROR` with `AD=1`; `bogus.aegis.test` → `SERVFAIL`; `insecure.aegis.test` → `NOERROR` without `AD`. The gateway test script also observed `SECURE`, `BOGUS`/`SERVFAIL`, `INSECURE`, and `BLOCKED_CD` outcomes. **ESP32 hardware integration and full baseline/performance benchmarking are still pending.**
 
-- `valid.aegis.test` — signed by the local `aegis.test` zone key; Unbound trusts that zone through a generated local trust anchor.
-- `bogus.aegis.test` — the `A` signature is intentionally modified after signing; Unbound should return `SERVFAIL`.
-- `insecure.aegis.test` — a separate unsigned child zone, delegated by the signed parent without a DS record; Unbound should answer without setting `AD`.
-- Python listens for DNS-over-TLS on TCP/853 and requires a client certificate signed by the development CA.
-- The browser dashboard receives best-effort metrics through Node.js on port 3000.
-
-The addresses in `192.0.2.0/24` are documentation-only example addresses. They are not intended to be reachable public services.
-
----
-
-## Part A — Windows 11 setup (recommended order)
-
-### 1. Install and start Docker Desktop
-
-Install Docker Desktop for Windows with the WSL 2 backend, start it, and wait until Docker reports that it is running. You do not need to install BIND9, Unbound, Node.js, or Python on Windows for the containerized services.
-
-### 2. Extract this project
-
-Download `AegisDNS_starter.zip`, then extract its contents **inside the folder named `AegisDNS`**. When extraction is done, the folder should contain `docker-compose.yml`, `README.md`, `dns`, `resolver`, `gateway`, `dashboard`, `esp32`, `scripts`, and `tools`.
-
-For example:
+## 1. Architecture
 
 ```text
-C:\Users\YOUR_USER\Projects\AegisDNS\docker-compose.yml
+ESP32 (Wi-Fi + mutual TLS / DNS-over-TLS, TCP 853)
+                     |
+                     v
+         Python asyncio DoT gateway
+         - validates client TLS certificate
+         - rejects client queries with CD=1
+         - forwards DNS queries to Unbound
+         - applies SECURE / INSECURE / BOGUS / ERROR policy
+         - emits latency and CPU telemetry
+                     |
+                     v
+          Unbound validating resolver
+          - local trust anchor for aegis.test
+          - DNSSEC validation
+                     |
+                     v
+          BIND9 authoritative test zones
+          - valid.aegis.test
+          - bogus.aegis.test
+          - insecure.aegis.test (unsigned child)
+
+Python gateway -- HTTP POST /api/metrics --> Express + Socket.io
+                                               |
+                                               v
+                                        Live dashboard
+                                        http://localhost:3000
 ```
 
-Do not put the zip file itself inside the project and forget to extract it.
+**Important concepts:** TLS authenticates the gateway and protects the client-to-gateway connection. DNSSEC validates DNS data. A secure TLS connection alone does not prove that a DNS answer passed DNSSEC validation. In this lab, the gateway trusts the AD flag only from its configured, controlled Unbound resolver.
 
-### 3. Open PowerShell in the project folder
+## 2. Repository layout
 
-In File Explorer, open the `AegisDNS` folder, click the address bar, type `powershell`, and press Enter. Confirm you are in the project directory:
-
-```powershell
-Get-ChildItem
+```text
+AegisDNS/
+├── docker-compose.yml
+├── .env.example
+├── .gitignore
+├── README.md
+├── README_SHORT.txt
+├── dns/
+│   ├── Dockerfile
+│   ├── named.conf
+│   ├── scripts/setup-zone.sh
+│   └── zone/
+│       ├── aegis.test.zone
+│       └── insecure.aegis.test.zone
+├── resolver/
+│   ├── Dockerfile
+│   ├── start-unbound.sh
+│   └── unbound.conf
+├── gateway/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── gateway.py
+├── dashboard/
+│   ├── Dockerfile
+│   ├── package.json
+│   ├── server.js
+│   └── public/index.html
+├── scripts/test_gateway.py
+├── tools/certgen/
+│   ├── Dockerfile
+│   └── generate-certs.sh
+└── esp32/
+    ├── src/main.cpp
+    └── certs/                  # local device cert files; ignored by Git
 ```
 
-### 4. Create your local environment file
+Generated DNSSEC material is written beneath `dns/generated/`; local TLS/PKI files are under `pki/`. These generated/private files must not be committed.
+
+## 3. Prerequisites
+
+For the local services:
+
+- Windows 11 (instructions below use PowerShell)
+- Docker Desktop running with the Linux/WSL 2 engine
+- Git
+- Python 3 for the host-side smoke-test script (`py` command on Windows)
+
+For firmware work:
+
+- Arduino IDE or another supported Arduino-ESP32 build environment
+- ESP32 board and a USB **data** cable
+- Wi-Fi network accessible to the gateway host
+
+You do not need to install BIND9, Unbound, Node.js, or Python dependencies directly on Windows; the services and gateway dependencies run in containers. Python is needed on the host only to run `scripts/test_gateway.py` as currently provided.
+
+## 4. Run locally on Windows
+
+Open PowerShell in the repository directory. The examples assume `D:\AegisDNS`; adjust the path if you cloned elsewhere.
+
+### 4.1 Configure environment
 
 ```powershell
+cd D:\AegisDNS
 Copy-Item .env.example .env
 ```
 
-For a first test from the same PC, keep `GATEWAY_IP=127.0.0.1`. Before using the ESP32, replace that value with your PC's local IPv4 address from `ipconfig` (usually the Wi-Fi adapter's IPv4 address, for example `192.168.1.25`). The certificate must include the address or hostname your device will use to reach the gateway.
+If `.env` already exists, **do not overwrite it**. Review `.env.example` for the names of supported settings. Keep `.env` local; it is ignored by Git.
 
-### 5. Generate the development certificates
-
-Run:
+### 4.2 Generate local development certificates
 
 ```powershell
 docker compose --profile tools run --rm certgen
 ```
 
-This builds a small helper container and creates files under `pki`. It generates a root CA, a gateway/server certificate, and a separate ESP32 client certificate. The gateway requires the client certificate because mutual TLS is enabled.
+This generates local TLS and client credentials beneath `pki/`. The CA private key and client/server private keys are secrets; do not commit or send them through GitHub. Certificate generation must be rerun if the configured gateway hostname/address or certificate settings change.
 
-If you change `GATEWAY_IP` after generating certificates, rerun the command so the server certificate contains the correct IP SAN. The Root CA is reused unless you manually delete `pki/rootCA.crt` and `pki/rootCA.key`.
-
-**Keep `pki/rootCA.key`, `pki/server.key`, and `pki/esp32-client.key` private. Never commit the `pki` folder to GitHub.** These are development credentials, not production-grade enrollment or key management.
-
-### 6. Build and launch the services
+### 4.3 Build and start the stack
 
 ```powershell
 docker compose up --build -d
-```
-
-Check that the containers are running:
-
-```powershell
 docker compose ps
 ```
 
-If a container keeps restarting, inspect its logs:
+Expected services are `authoritative`, `resolver`, `gateway`, and `dashboard`. Check startup logs if a service is restarting:
 
 ```powershell
-docker compose logs --tail 150 authoritative
-docker compose logs --tail 150 resolver
-docker compose logs --tail 150 gateway
-docker compose logs --tail 150 dashboard
+docker compose logs --tail 100 authoritative
+docker compose logs --tail 100 resolver
+docker compose logs --tail 100 gateway
+docker compose logs --tail 100 dashboard
 ```
 
-The first BIND startup generates and signs the zone. The resolver waits for the generated trust-anchor file. On the first startup, give that initialization a little time, then inspect the logs for errors.
+Dashboard: <http://localhost:3000>  
+Gateway: TCP port `853` on the Docker host.  
+The current Compose configuration binds the dashboard to `127.0.0.1:3000` for local access. Do not expose the resolver or authoritative DNS service publicly.
 
-### 7. Verify the DNSSEC results before testing the gateway
+## 5. Verify DNSSEC outcomes
 
-Run these commands from PowerShell:
+Run these commands from PowerShell. The quotes around `@127.0.0.1` are important because `@` is special syntax in PowerShell.
 
 ```powershell
-docker compose exec resolver dig @127.0.0.1 valid.aegis.test A +dnssec
-docker compose exec resolver dig @127.0.0.1 bogus.aegis.test A +dnssec
-docker compose exec resolver dig @127.0.0.1 insecure.aegis.test A +dnssec
+docker compose exec resolver dig '@127.0.0.1' valid.aegis.test A +dnssec
+docker compose exec resolver dig '@127.0.0.1' bogus.aegis.test A +dnssec
+docker compose exec resolver dig '@127.0.0.1' insecure.aegis.test A +dnssec
 ```
 
 Expected results:
 
-| Query | Expected result |
-|---|---|
-| `valid.aegis.test` | `NOERROR`; response flags include `ad` |
-| `bogus.aegis.test` | `SERVFAIL` (the deliberately corrupted RRSIG fails validation) |
-| `insecure.aegis.test` | `NOERROR`; response flags do **not** include `ad` |
+| Name | Expected DNS result | AD bit | Meaning |
+|---|---|---|---|
+| `valid.aegis.test` | `NOERROR` | Present (`AD=1`) | Signature validated |
+| `bogus.aegis.test` | `SERVFAIL` | Absent | DNSSEC validation failed; expected for deliberately broken RRSIG |
+| `insecure.aegis.test` | `NOERROR` | Absent (`AD=0`) | Unsigned/insecure child delegation; not equivalent to bogus |
 
-Look at the `status:` line and `flags:` line in the `dig` output. The insecure result should be an answer without the `ad` flag. If these results do not match, **stop here and inspect the resolver/authoritative logs**; the dashboard cannot compensate for incorrect DNSSEC setup.
+A `SERVFAIL` is not universally proof of a DNSSEC failure: real resolver deployments can return it for timeouts and configuration/network errors too. The lab intentionally uses the broken-signature domain to demonstrate the bogus path.
 
-### 8. Open the dashboard
+## 6. Test the gateway and dashboard
 
-Open this address in your browser:
-
-```text
-http://localhost:3000
-```
-
-The page should show `Connected to live feed`. It remains idle until a query goes through the Python gateway.
-
-### 9. Test DNS-over-TLS from Windows
-
-The smoke test uses only Python's standard library; it does not require `pip install`. Make sure you have Python 3.10+ installed, then run:
+Keep the Docker stack running and execute:
 
 ```powershell
 py scripts/test_gateway.py
 ```
 
-It connects to `127.0.0.1:853`, validates the server certificate against the Root CA, presents the client certificate, and queries all three test domains. It also sends a `CD=1` query to confirm that the gateway returns `REFUSED` (rcode 5). A successful run should show `SECURE` for the valid name, `SERVFAIL` for the bogus name, and `INSECURE` for the insecure name. It also sends event metrics to the dashboard, so the live log and latency chart should update.
-
-If Python is not installed on Windows, you can use the ESP32 test or install Python from the official Python distribution; Docker itself does not depend on a host Python install.
-
-### 10. Shut down
-
-```powershell
-docker compose down
-```
-
-This keeps generated DNSSEC keys and certificates. To delete containers and networks *and* reset the test data manually, stop the services first, then remove generated files from `dns/generated` and `pki`. Never delete private keys from a production deployment without understanding the consequences.
-
----
-
-## Part B — ESP32 setup
-
-### 1. Set the LAN IP before generating certificates
-
-Run `ipconfig`, find the PC's Wi-Fi adapter IPv4 address, and put it in `.env`, for example:
+The test issues queries for the three controlled domains and sends a `CD=1` query. The observed intended outcomes are:
 
 ```text
-GATEWAY_IP=192.168.1.25
+valid.aegis.test      SECURE      rcode=0 AD=1
+bogus.aegis.test      SERVFAIL    rcode=2 AD=0
+insecure.aegis.test   INSECURE    rcode=0 AD=0
+CD=1 test             REFUSED     rcode=5 AD=0
 ```
 
-Then regenerate the certificates and recreate the gateway:
+The exact spacing and latency vary. Keep <http://localhost:3000> open; accepted metrics are sent to Express at `POST /api/metrics` and broadcast to browsers through Socket.io as the `dns_metric` event.
+
+Useful checks:
 
 ```powershell
-docker compose --profile tools run --rm certgen
-docker compose up -d --force-recreate gateway
+docker compose ps
+docker compose logs --tail 60 gateway
+docker compose logs --tail 60 dashboard
 ```
 
-Make sure TCP/853 is allowed through the Windows firewall on your private network. The ESP32 and PC should be on the same LAN. Do not expose port 853 or port 3000 to the public internet.
+If only the dashboard is being changed, rebuild just that service:
 
-### 2. Copy the certificates into firmware
+```powershell
+docker compose up -d --build --force-recreate dashboard
+```
 
-Open these files in the `pki` folder:
+Hard-refresh the browser with **Ctrl+F5**.
 
-- `rootCA.crt` → paste into `ROOT_CA` in `esp32/src/main.cpp`
-- `esp32-client.crt` → paste into `CLIENT_CERT`
-- `esp32-client.key` → paste into `CLIENT_KEY`
+## 7. ESP32 teammate handoff
 
-Keep PEM headers and footers. Paste the complete file contents between the raw-string delimiters. Do **not** paste `rootCA.key` or `server.key` into the ESP32 sketch.
+The current firmware source is `esp32/src/main.cpp`. It uses `WiFiClientSecure`, performs DNS-over-TLS framing (2-byte message length prefix), sends DNS A queries, and prints the response status and query latency over Serial.
 
-### 3. Configure and upload
+### Firmware checklist
 
-Open `esp32/src/main.cpp` in Arduino IDE. Install the Espressif ESP32 board support package if you have not already done so. Set `WIFI_SSID`, `WIFI_PASSWORD`, and `GATEWAY_HOST`.
+1. Install Arduino IDE and the `esp32` board package by Espressif Systems.
+2. Open `esp32/src/main.cpp` in an Arduino-ESP32 project and select the correct ESP32 board and serial port when hardware is available.
+3. Set the Wi-Fi SSID and password locally.
+4. Use a **device-specific client certificate and private key** issued by the CA trusted by the gateway. The gateway requires mutual TLS.
+5. Embed/configure the public CA certificate used to validate the gateway certificate, and verify the gateway hostname against a matching certificate SAN.
+6. Set the gateway endpoint to the laptop/server LAN IP and a hostname covered by the gateway certificate. `localhost` on the ESP32 would mean the ESP32 itself, not the laptop.
+7. Ensure the ESP32 and gateway host can reach each other (same LAN for the initial test), TCP 853 is allowed by the host firewall, and the gateway is running.
+8. Query `valid.aegis.test`, `bogus.aegis.test`, and `insecure.aegis.test`; compare the serial output with the dashboard events.
 
-For hostname verification, set `GATEWAY_HOST` to `aegisdns.local` and arrange a local DNS/mDNS mapping from that name to the PC's LAN IP. If your network cannot resolve that name, create a local DNS host record in your router or configure the LAN name service. The certificate also includes `GATEWAY_IP` as an IP SAN, but prefer the DNS hostname so certificate-name validation follows the conventional hostname path. **Never call `setInsecure()`** to work around a certificate error.
+### Credentials and collaboration warning
 
-Select your ESP32 board and serial port, upload the sketch, then open Serial Monitor at `115200` baud. It cycles through the three test names and prints DNS result, AD bit, and elapsed time.
+Do **not** commit real certificate private keys, Wi-Fi passwords, or populated PEM secrets in tracked firmware source. The starter `main.cpp` contains placeholder PEM blocks; use local, ignored credentials or refactor them to a local ignored secrets header before inserting real credentials. Never send the CA private key (`rootCA.key`) to a teammate or put it in GitHub. To test against one person's gateway, the device needs its own client certificate signed by the CA that gateway trusts; exchange device credentials securely, or let each teammate test against their own local stack/CA first.
 
-The sketch includes TLS connection setup in its latency value because it opens a new TLS connection per query. If you need steady-state DNS-only latency, keep a TLS session open and send multiple DNS messages over the same connection.
+### Hostname and IP details
+
+The server certificate's DNS/IP Subject Alternative Name must match the hostname/IP used by the ESP32. A certificate for `aegisdns.local` will not automatically validate if the device connects by a different name or only by an IP that is absent from the certificate SAN. Check the generated certificate and configure the device's hostname resolution accordingly. Do not disable certificate verification to work around name mismatches.
+
+## 8. Git collaboration workflow
+
+Use a separate branch per task. Avoid committing directly to `main` for ongoing feature work.
+
+### First publish (repository owner)
+
+Create an **empty** GitHub repository (do not generate an additional GitHub README or `.gitignore`, since these exist locally). Then, from the project folder:
+
+```powershell
+git status
+git remote add origin https://github.com/<OWNER>/AegisDNS.git
+git push -u origin main
+```
+
+Replace `<OWNER>` with the GitHub account or organization. If `origin` already exists, inspect `git remote -v` instead of adding it again. Keep the repository private until secrets and publication choices have been reviewed.
+
+Invite your teammate from GitHub repository **Settings → Collaborators**. They must accept the invitation.
+
+### Teammate: clone and create a branch
+
+```powershell
+git clone https://github.com/<OWNER>/AegisDNS.git
+cd AegisDNS
+git switch -c feature/esp32-integration
+Copy-Item .env.example .env
+docker compose --profile tools run --rm certgen
+docker compose up --build -d
+```
+
+If they only work on firmware and do not have the ESP32 yet, they can edit and compile-check the source when their toolchain is available; physical connectivity and TLS validation need the hardware and authorized credentials.
+
+### Each contributor: commit and push their branch
+
+```powershell
+git status
+git add esp32/src/main.cpp
+git commit -m "feat(esp32): improve gateway client"
+git push -u origin feature/esp32-integration
+```
+
+Stage only the files relevant to your own change. Then open a pull request on GitHub to merge the feature branch into `main`. For dashboard work, use a separate branch name such as `feature/dashboard-ui` and stage the relevant `dashboard/` files instead.
+
+Before every push, check for accidentally staged secrets:
+
+```powershell
+git status --short
+git diff --cached --name-only
+```
+
+Never rely on repository privacy as a substitute for keeping private credentials out of Git.
+
+## 9. Security and prototype limitations
+
+- This is a hackathon/lab prototype, not hardened production DNS infrastructure.
+- The dashboard metrics endpoint is currently unauthenticated. Keep it on a trusted private network until gateway-to-dashboard authentication and access controls are added.
+- Trust the AD bit only from the resolver that the gateway controls and protects. Do not accept an arbitrary client-supplied AD bit as proof.
+- Distinguish bogus validation from transport failure, timeout, indeterminate result, and resolver configuration error before production use.
+- Define an explicit policy for insecure results. This demo reports insecure separately; teams may choose to reject or return flagged results depending on the intended policy.
+- Do not expose recursive DNS services (Unbound) or the authoritative lab server directly to the public Internet.
+- Dashboard statistics are in-memory session data; they reset on refresh and are not a durable benchmark store.
+- Full repeatable performance evaluation (baseline comparison, median/p95 latency, gateway RSS/memory, ESP32 free heap and TLS handshake timing) remains future work.
+
+## 10. Troubleshooting
+
+**Docker command not found**  
+Start Docker Desktop, open a new terminal, and check `docker --version` and `docker info`.
+
+**Authoritative container restarts or zone does not load**  
+Inspect `docker compose logs --tail 100 authoritative`. The signed test zone must load without syntax errors.
+
+**PowerShell errors on `@127.0.0.1`**  
+Quote the argument: `dig '@127.0.0.1' ...`.
+
+**Valid name returns `NXDOMAIN` from Unbound**  
+Check `resolver/unbound.conf`, especially the `local-zone: "test." transparent` setting and the `stub-zone` for `aegis.test.`. Validate the config with `docker compose exec resolver unbound-checkconf /etc/unbound/unbound.conf` and inspect resolver logs.
+
+**Gateway returns `SERVFAIL` for every name**  
+Inspect `docker compose logs --tail 100 gateway`; confirm resolver host/port environment and ensure code changes were rebuilt with `docker compose up -d --build --force-recreate gateway`.
+
+**No events appear on the dashboard**  
+Keep the gateway and dashboard running, run `py scripts/test_gateway.py`, and inspect both service logs. Confirm that the gateway's metrics URL uses the Compose service name for the dashboard when inside Docker.
+
+**ESP32 TLS connection fails**  
+Check Wi-Fi reachability, host firewall TCP 853, client certificate trust, gateway certificate SAN/hostname match, and that the certificate/private key pair is correct. Do not disable certificate verification.
+
+## 11. Current next milestones
+
+- [ ] ESP32 compiles and connects to the gateway using real mutual TLS
+- [ ] Confirm hostname verification and a no-plaintext-fallback failure path on hardware
+- [ ] Confirm ESP32 test requests appear on the live dashboard
+- [ ] Persist structured events to JSONL/CSV for repeatable evaluation
+- [ ] Add a baseline-vs-AegisDNS benchmark runner and report median/p95 latency
+- [ ] Measure gateway CPU and memory, and ESP32 free heap/TLS handshake timing
+- [ ] Improve classification of resolver errors vs. DNSSEC-bogus outcomes
+- [ ] Add authentication/access controls to the telemetry endpoint before any broader deployment
 
 ---
 
-## Troubleshooting
-
-**`docker compose` cannot find certificates:** Run the certificate-generation command first. Check that `pki/server.crt`, `pki/server.key`, and `pki/rootCA.crt` exist.
-
-**Resolver restarts waiting for the trust anchor:** Check `docker compose logs authoritative`. Confirm the generated folder contains `aegis.test.zone`, `insecure.aegis.test.zone`, and `aegis-trust-anchor.key`.
-
-**The valid query lacks `ad`:** Do not treat the query as secure. Check the trust-anchor file, signed zone, clock, resolver logs, and BIND's zone-load logs.
-
-**The bogus query does not produce `SERVFAIL`:** Look for the setup-script line confirming that the bogus RRSIG was corrupted. Check whether the current BIND signer output format changed; the script intentionally stops if it cannot locate the RRSIG rather than silently pretending the test succeeded.
-
-**The insecure query has `ad`:** Check that `insecure.aegis.test` is a separate unsigned child zone and the signed parent contains no DS record for it.
-
-**Dashboard is blank:** Check `docker compose logs dashboard gateway`, then run `py scripts/test_gateway.py`. Confirm `http://localhost:3000/health` returns JSON.
-
-**ESP32 cannot connect:** Check the PC's LAN IP, `GATEWAY_IP`, server certificate SAN, Windows firewall, same-LAN connectivity, certificate PEM formatting, and the gateway logs. Do not disable TLS verification.
-
----
-
-## Important limitations and safe-use notes
-
-- This is a local demonstrator, not a production resolver or firewall.
-- The root CA private key is used to sign demo certificates and must be kept offline in any real deployment.
-- The gateway trusts Unbound's AD bit because Unbound is a controlled component on an isolated Docker network. The AD bit alone is not a cryptographic proof to an arbitrary client.
-- A `SERVFAIL` can mean DNSSEC validation failure, timeout, or another resolver error. The dashboard's `BOGUS` mapping is intentionally simplified for this lab.
-- The metrics API has no authentication in this starter. Keep it on a trusted lab network; add authentication and rate limits before broader use.
-- The dashboard tracks events from its current browser session only and does not persist or replay historical metrics.
-- `aegis.test` is a private test zone and is not a public DNSSEC delegation.
+**Keep the secrets local. Commit source code and documentation; do not commit live credentials.**
