@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10120f">
+  <meta name="description" content="AegisDNS real-time DNS security and resolver telemetry console.">
+  <title>AegisDNS — Security Operations</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/vendor/chart.umd.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #10120f;
+      --bg-soft: #141713;
+      --panel: #181b16;
+      --panel-raised: #1d211a;
+      --panel-hover: #22271e;
+      --line: #30362b;
+      --line-soft: #262b23;
+      --text: #f0f2e9;
+      --muted: #a0a795;
+      --quiet: #737b6a;
+      --acid: #c8f169;
+      --acid-ink: #202714;
+      --amber: #f3b45e;
+      --red: #ff705f;
+      --red-bg: #43231f;
+      --green-bg: #29351b;
+      --amber-bg: #40301c;
+      --radius: 16px;
+      --shadow: 0 18px 50px rgba(0, 0, 0, .18);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 92px; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(ellipse at 72% -15%, rgba(200, 241, 105, .07), transparent 42%),
+        var(--bg);
+      color: var(--text);
+      font: 14px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: .005em;
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, a:focus-visible, input:focus-visible {
+      outline: 2px solid var(--acid); outline-offset: 3px;
+    }
+    a { color: inherit; text-decoration: none; }
+    .app-shell { min-height: 100vh; }
+
+    .sidebar {
+      position: fixed; inset: 0 auto 0 0; z-index: 20;
+      width: 232px; padding: 23px 15px 18px;
+      display: flex; flex-direction: column;
+      background: rgba(18, 21, 16, .96);
+      border-right: 1px solid var(--line-soft);
+      backdrop-filter: blur(16px);
+    }
+    .brand { display: flex; align-items: center; gap: 11px; padding: 0 10px 28px; }
+    .brand-mark {
+      display: grid; place-items: center; width: 37px; height: 37px;
+      background: var(--acid); color: var(--acid-ink); border-radius: 11px;
+      box-shadow: 0 0 26px rgba(200, 241, 105, .11);
+    }
+    .brand-mark svg { width: 22px; height: 22px; }
+    .brand-name { font-size: 15px; font-weight: 790; letter-spacing: .11em; }
+    .brand-sub { margin-top: 1px; font-size: 9px; font-weight: 700; color: var(--muted); letter-spacing: .18em; }
+    .nav-label { padding: 0 12px; margin: 7px 0 9px; color: var(--quiet); font-size: 10px; font-weight: 750; letter-spacing: .16em; text-transform: uppercase; }
+    .nav { display: grid; gap: 5px; }
+    .nav a {
+      display: flex; align-items: center; gap: 12px; padding: 11px 12px;
+      color: var(--muted); border: 1px solid transparent; border-radius: 10px;
+      transition: color .18s ease, background .18s ease, border-color .18s ease, transform .18s ease;
+    }
+    .nav a:hover { color: var(--text); background: var(--panel); transform: translateX(2px); }
+    .nav a.active { color: var(--acid); background: rgba(200, 241, 105, .075); border-color: rgba(200, 241, 105, .17); }
+    .nav svg { width: 17px; height: 17px; flex: 0 0 auto; }
+    .nav .nav-count { margin-left: auto; font-size: 10px; color: var(--quiet); font-variant-numeric: tabular-nums; }
+    .side-spacer { flex: 1; }
+    .pipeline-card { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(145deg, #1d2218, #151812); }
+    .pipeline-heading { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 750; }
+    .mini-pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--acid); box-shadow: 0 0 0 4px rgba(200, 241, 105, .09); }
+    .pipeline-card p { margin: 9px 0 0; color: var(--muted); font-size: 11px; line-height: 1.65; }
+    .side-foot { padding: 15px 10px 0; display: flex; justify-content: space-between; color: var(--quiet); font-size: 10px; }
+
+    .main-shell { margin-left: 232px; min-width: 0; }
+    .topbar {
+      min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 20px;
+      padding: 15px clamp(20px, 3vw, 42px); border-bottom: 1px solid var(--line-soft);
+      position: sticky; top: 0; z-index: 15; background: rgba(16, 18, 15, .86); backdrop-filter: blur(18px);
+    }
+    .crumb { color: var(--quiet); font-size: 11px; letter-spacing: .04em; }
+    .crumb strong { color: var(--text); font-weight: 650; }
+    .top-right { display: flex; align-items: center; gap: 17px; }
+    .feed-state { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .state-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); flex: 0 0 auto; }
+    .state-dot.connected { background: var(--acid); box-shadow: 0 0 0 4px rgba(200, 241, 105, .09); animation: beacon 2.4s ease-out infinite; }
+    .state-dot.offline { background: var(--red); }
+    .clock { border-left: 1px solid var(--line); padding-left: 17px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .main-content { max-width: 1600px; margin: 0 auto; padding: 29px clamp(20px, 3vw, 42px) 36px; }
+    .eyebrow { display: flex; align-items: center; gap: 9px; color: var(--acid); text-transform: uppercase; letter-spacing: .17em; font-size: 10px; font-weight: 800; }
+    .eyebrow-line { width: 23px; height: 1px; background: var(--acid); }
+    .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 25px; margin-bottom: 25px; animation: rise-in .55s both; }
+    h1 { margin: 10px 0 8px; font-size: clamp(28px, 3.2vw, 43px); line-height: 1.07; letter-spacing: -.055em; font-weight: 720; }
+    h1 .accent { color: var(--acid); }
+    .hero-copy { margin: 0; color: var(--muted); max-width: 650px; font-size: 13px; }
+    .hero-meta { flex: 0 0 auto; display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 11px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(24, 27, 22, .75); }
+    .hero-meta svg { width: 15px; height: 15px; color: var(--acid); }
+
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; margin-bottom: 17px; }
+    .metric-card { position: relative; min-width: 0; padding: 17px 18px 16px; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); transition: transform .2s ease, border-color .2s ease, background .2s ease; animation: rise-in .55s both; }
+    .metric-card:nth-child(2) { animation-delay: .05s; }
+    .metric-card:nth-child(3) { animation-delay: .1s; }
+    .metric-card:nth-child(4) { animation-delay: .15s; }
+    .metric-card:hover { transform: translateY(-3px); border-color: #49513d; background: var(--panel-raised); }
+    .metric-card::after { content: ""; position: absolute; width: 90px; height: 90px; border-radius: 50%; right: -44px; top: -49px; background: var(--glow, rgba(200, 241, 105, .08)); filter: blur(1px); pointer-events: none; }
+    .metric-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .metric-label { color: var(--muted); font-size: 11px; font-weight: 600; }
+    .metric-icon { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line); color: var(--metric-color, var(--acid)); border-radius: 9px; background: rgba(255,255,255,.015); }
+    .metric-icon svg { width: 16px; height: 16px; }
+    .metric-value { margin-top: 10px; font-size: clamp(29px, 2.5vw, 36px); line-height: 1.05; font-weight: 760; letter-spacing: -.055em; font-variant-numeric: tabular-nums; }
+    .metric-foot { display: flex; align-items: center; gap: 7px; margin-top: 12px; color: var(--quiet); font-size: 10px; }
+    .tiny-mark { width: 5px; height: 5px; border-radius: 50%; background: var(--metric-color, var(--acid)); }
+    .metric-card.flash .metric-value { animation: number-pop .36s ease; }
+
+    .content-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(270px, .85fr); gap: 15px; margin-bottom: 17px; }
+    .panel { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); overflow: hidden; box-shadow: var(--shadow); animation: rise-in .55s .12s both; }
+    .panel-header { min-height: 67px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 19px; border-bottom: 1px solid var(--line-soft); }
+    .panel-title { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: -.01em; }
+    .panel-subtitle { margin-top: 4px; color: var(--quiet); font-size: 10px; }
+    .panel-tag { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; color: var(--muted); font-size: 10px; white-space: nowrap; }
+    .panel-tag .tiny-mark { background: var(--acid); }
+    .chart-area { height: 280px; padding: 18px 17px 12px; position: relative; }
+    .chart-foot { display: flex; justify-content: space-between; gap: 12px; padding: 0 19px 15px; color: var(--quiet); font-size: 10px; }
+    .chart-foot strong { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .right-stack { display: grid; grid-template-rows: auto 1fr; gap: 15px; min-width: 0; }
+    .distribution { padding: 19px; }
+    .distribution-total { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 17px; }
+    .distribution-total strong { font-size: 27px; letter-spacing: -.05em; font-variant-numeric: tabular-nums; }
+    .distribution-total span { color: var(--quiet); font-size: 10px; }
+    .segmented-bar { display: flex; height: 8px; gap: 3px; overflow: hidden; border-radius: 99px; background: #2a2e26; }
+    .segment { width: 0; border-radius: 99px; transition: width .55s cubic-bezier(.2,.8,.2,1); }
+    .segment.secure-seg { background: var(--acid); }
+    .segment.insecure-seg { background: var(--amber); }
+    .segment.blocked-seg { background: var(--red); }
+    .legend-list { display: grid; gap: 12px; margin-top: 19px; }
+    .legend-row { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 11px; }
+    .legend-dot { width: 7px; height: 7px; border-radius: 2px; background: var(--legend); }
+    .legend-row strong { margin-left: auto; color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
+    .pipeline { padding: 18px 19px; }
+    .pipeline-steps { display: grid; gap: 0; margin-top: 14px; }
+    .pipeline-step { display: grid; grid-template-columns: 24px 1fr auto; align-items: center; gap: 10px; min-height: 44px; position: relative; }
+    .pipeline-step:not(:last-child)::after { content: ""; position: absolute; left: 11px; top: 32px; height: 22px; border-left: 1px dashed #48503c; }
+    .step-number { width: 23px; height: 23px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 7px; color: var(--acid); font-size: 10px; font-weight: 750; background: var(--panel-raised); }
+    .step-name { font-size: 11px; font-weight: 650; }
+    .step-detail { color: var(--quiet); font-size: 9px; margin-top: 1px; }
+    .step-port { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+
+    .events-panel { animation-delay: .18s; }
+    .event-header { display: flex; align-items: center; justify-content: space-between; gap: 15px; flex-wrap: wrap; padding: 17px 19px; border-bottom: 1px solid var(--line-soft); }
+    .event-head-left { display: flex; align-items: center; gap: 11px; }
+    .live-bars { display: flex; align-items: center; gap: 3px; height: 20px; padding: 0 7px; border: 1px solid var(--line); border-radius: 7px; }
+    .live-bars span { width: 3px; height: 7px; border-radius: 5px; background: var(--acid); animation: equalize .9s ease-in-out infinite alternate; }
+    .live-bars span:nth-child(2) { height: 13px; animation-delay: .2s; }
+    .live-bars span:nth-child(3) { height: 9px; animation-delay: .45s; }
+    .live-bars.paused span { animation-play-state: paused; opacity: .35; }
+    .event-controls { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+    .search-box { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #131610; color: var(--quiet); }
+    .search-box svg { width: 14px; height: 14px; flex: 0 0 auto; }
+    .search-box input { width: 145px; min-width: 80px; border: 0; outline: none; background: transparent; color: var(--text); font-size: 11px; }
+    .search-box input::placeholder { color: var(--quiet); }
+    .control-btn { min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #20231d; color: var(--muted); cursor: pointer; font-size: 10px; font-weight: 650; white-space: nowrap; transition: color .18s ease, border-color .18s ease, background .18s ease, transform .18s ease; }
+    .control-btn:hover { color: var(--text); border-color: #505747; background: #282d23; }
+    .control-btn.primary { color: var(--acid); border-color: rgba(200, 241, 105, .3); background: rgba(200, 241, 105, .07); }
+    .control-btn:active { transform: scale(.97); }
+    .control-btn svg { width: 13px; height: 13px; }
+    .filter-row { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; padding: 12px 19px; border-bottom: 1px solid var(--line-soft); background: rgba(12, 14, 11, .22); }
+    .filter-label { margin-right: 5px; color: var(--quiet); font-size: 10px; }
+    .filter-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid transparent; border-radius: 7px; color: var(--muted); background: transparent; cursor: pointer; font-size: 10px; transition: all .18s ease; }
+    .filter-chip:hover { background: var(--panel-hover); color: var(--text); }
+    .filter-chip.active { border-color: #404838; background: #262d20; color: var(--acid); }
+    .filter-chip .chip-num { color: var(--quiet); font-size: 9px; }
+    .table-wrap { max-height: 425px; overflow: auto; scrollbar-color: #454b3f #171a15; scrollbar-width: thin; }
+    table { width: 100%; min-width: 820px; border-collapse: separate; border-spacing: 0; text-align: left; }
+    th { position: sticky; top: 0; z-index: 2; background: #191c17; color: var(--quiet); font-size: 9px; font-weight: 750; text-transform: uppercase; letter-spacing: .11em; }
+    th, td { padding: 13px 17px; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
+    td { color: #d9ddcf; font-size: 11px; font-variant-numeric: tabular-nums; }
+    tbody tr { background: rgba(255,255,255,0); transition: background .18s ease; }
+    tbody tr:hover { background: #20241c; }
+    tbody tr.new-event { animation: event-in .45s ease both; }
+    tbody tr.new-event td:first-child { box-shadow: inset 2px 0 var(--acid); }
+    .time-cell { color: var(--quiet); }
+    .domain-cell { color: var(--text); font-weight: 620; }
+    .record-type { display: inline-grid; place-items: center; min-width: 25px; padding: 3px 5px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); font-size: 9px; font-weight: 750; }
+    .decision { display: inline-flex; align-items: center; gap: 6px; font-size: 9px; font-weight: 800; letter-spacing: .035em; }
+    .decision::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+    .decision.SECURE { color: var(--acid); }
+    .decision.INSECURE { color: var(--amber); }
+    .decision.BOGUS, .decision.ERROR, .decision.BLOCKED_CD { color: var(--red); }
+    .latency-value { color: var(--text); }
+    .latency-track { display: inline-block; width: 47px; height: 3px; margin-left: 8px; vertical-align: middle; border-radius: 4px; background: #2e3329; overflow: hidden; }
+    .latency-fill { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--acid); animation: fill-in .6s ease both; }
+    .cpu-cell { color: var(--muted); }
+    .empty-state { padding: 43px 20px !important; text-align: center; color: var(--quiet); white-space: normal; }
+    .empty-state strong { display: block; color: var(--text); font-size: 12px; margin-bottom: 5px; }
+    .empty-state span { font-size: 11px; }
+    .event-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 19px; color: var(--quiet); font-size: 10px; }
+    .footer-status { display: flex; align-items: center; gap: 7px; }
+    .footer-status .tiny-mark { background: var(--acid); }
+    .footer-right { font-variant-numeric: tabular-nums; }
+    .bottom-note { display: flex; justify-content: space-between; align-items: center; gap: 15px; margin-top: 17px; padding: 0 2px; color: var(--quiet); font-size: 10px; }
+    .bottom-note strong { color: var(--muted); font-weight: 600; }
+    .toast { position: fixed; right: 22px; bottom: 22px; z-index: 50; max-width: min(360px, calc(100vw - 36px)); padding: 12px 15px; border: 1px solid #49513d; border-radius: 10px; background: #20251b; color: var(--text); box-shadow: var(--shadow); font-size: 12px; opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .2s ease, transform .2s ease; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .mobile-brand { display: none; }
+
+    @keyframes beacon { 0% { box-shadow: 0 0 0 0 rgba(200,241,105,.25); } 75%,100% { box-shadow: 0 0 0 6px rgba(200,241,105,0); } }
+    @keyframes rise-in { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes number-pop { 0% { transform: translateY(3px); opacity: .55; } 100% { transform: translateY(0); opacity: 1; } }
+    @keyframes event-in { from { opacity: 0; transform: translateY(-7px); background: rgba(200,241,105,.07); } to { opacity: 1; transform: translateY(0); background: transparent; } }
+    @keyframes equalize { from { transform: scaleY(.55); opacity: .6; } to { transform: scaleY(1.15); opacity: 1; } }
+    @keyframes fill-in { from { width: 0; } to { width: var(--fill-width); } }
+
+    @media (max-width: 1180px) {
+      .sidebar { width: 205px; }
+      .main-shell { margin-left: 205px; }
+      .content-grid { grid-template-columns: minmax(0, 1.3fr) minmax(250px, .9fr); }
+      .metrics { gap: 10px; }
+      .metric-card { padding: 15px; }
+    }
+    @media (max-width: 980px) {
+      .sidebar { width: 66px; padding: 20px 9px 15px; align-items: center; }
+      .brand { padding: 0 0 28px; }
+      .brand-copy, .nav-label, .nav-text, .nav-count, .pipeline-card, .side-foot { display: none; }
+      .nav { width: 100%; }
+      .nav a { justify-content: center; padding: 12px 0; }
+      .nav svg { width: 19px; height: 19px; }
+      .main-shell { margin-left: 66px; }
+      .content-grid { grid-template-columns: 1fr; }
+      .right-stack { grid-template-columns: 1fr 1fr; grid-template-rows: auto; }
+      .chart-area { height: 265px; }
+    }
+    @media (max-width: 650px) {
+      .sidebar { display: none; }
+      .main-shell { margin-left: 0; }
+      .topbar { min-height: 64px; padding: 13px 16px; }
+      .mobile-brand { display: flex; align-items: center; gap: 9px; font-weight: 800; letter-spacing: .12em; font-size: 12px; }
+      .mobile-brand .brand-mark { width: 29px; height: 29px; border-radius: 8px; }
+      .mobile-brand .brand-mark svg { width: 17px; height: 17px; }
+      .crumb { display: none; }
+      .top-right { gap: 0; }
+      .clock { display: none; }
+      .feed-state { font-size: 10px; }
+      .main-content { padding: 23px 14px 24px; }
+      .hero { display: block; margin-bottom: 18px; }
+      h1 { font-size: 33px; }
+      .hero-copy { font-size: 12px; }
+      .hero-meta { display: inline-flex; margin-top: 15px; }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+      .metric-card { padding: 13px; border-radius: 12px; }
+      .metric-label { font-size: 10px; }
+      .metric-icon { width: 26px; height: 26px; }
+      .metric-value { font-size: 29px; }
+      .metric-foot { font-size: 9px; }
+      .panel-header, .event-header { padding: 14px; }
+      .right-stack { grid-template-columns: 1fr; }
+      .chart-area { height: 230px; padding: 13px 10px 7px; }
+      .chart-foot { padding: 0 14px 13px; }
+      .event-header { align-items: flex-start; }
+      .event-controls { width: 100%; justify-content: flex-start; }
+      .search-box { flex: 1; }
+      .search-box input { width: 100%; }
+      .filter-row { padding: 11px 14px; }
+      .table-wrap { max-height: 390px; }
+      .bottom-note { align-items: flex-start; flex-direction: column; gap: 5px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <a class="brand" href="#overview" aria-label="AegisDNS home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 2.7 20 5.8v5.5c0 5.1-3.5 8.4-8 10.2-4.5-1.8-8-5.1-8-10.2V5.8l8-3.1Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m8.1 12.1 2.5 2.5 5.4-5.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="brand-copy"><span class="brand-name">AEGISDNS</span><span class="brand-sub">NETWORK DEFENCE</span></span>
+      </a>
+
+      <div class="nav-label">Workspace</div>
+      <nav class="nav">
+        <a class="active" href="#overview" data-nav="overview" title="Overview">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="4" rx="1.2"/><rect x="13.5" y="10.5" width="7" height="10" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/></svg>
+          <span class="nav-text">Overview</span>
+        </a>
+        <a href="#latency" data-nav="latency" title="Performance">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 17.5h3.5l3-8 4.1 10 3.2-6H21" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 21h18" stroke-linecap="round"/></svg>
+          <span class="nav-text">Performance</span>
+        </a>
+        <a href="#events" data-nav="events" title="Event stream">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4.5h14a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z"/><path d="M7 8h4M7 12h10M7 16h7" stroke-linecap="round"/></svg>
+          <span class="nav-text">Event stream</span><span id="navEventCount" class="nav-count">0</span>
+        </a>
+      </nav>
+
+      <div class="nav-label" style="margin-top:29px">Infrastructure</div>
+      <div class="nav">
+        <a href="#pipeline" data-nav="pipeline" title="Request path">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="7" height="6" rx="1.5"/><rect x="14" y="14" width="7" height="6" rx="1.5"/><path d="M10 7h3a2 2 0 0 1 2 2v3a2 2 0 0 0 2 2h1" stroke-linecap="round"/></svg>
+          <span class="nav-text">Request path</span>
+        </a>
+      </div>
+
+      <div class="side-spacer"></div>
+      <div class="pipeline-card">
+        <div class="pipeline-heading"><span class="mini-pulse"></span> LAB ENVIRONMENT</div>
+        <p>Controlled DNSSEC zone<br>Local resolver · gateway telemetry<br>No historical database configured</p>
+      </div>
+      <div class="side-foot"><span>AEGIS / LAB</span><span>v1.0</span></div>
+    </aside>
+
+    <div class="main-shell">
+      <header class="topbar">
+        <div class="crumb">SECURITY OPERATIONS <span style="color:var(--line);padding:0 8px">/</span> <strong>Overview</strong></div>
+        <a class="mobile-brand" href="#overview"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2.7 20 5.8v5.5c0 5.1-3.5 8.4-8 10.2-4.5-1.8-8-5.1-8-10.2V5.8l8-3.1Z" stroke="currentColor" stroke-width="1.8"/><path d="m8.1 12.1 2.5 2.5 5.4-5.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span> AEGISDNS</a>
+        <div class="top-right">
+          <div class="feed-state" role="status" aria-live="polite"><span id="connectionDot" class="state-dot"></span><span id="connectionText">Connecting to telemetry</span></div>
+          <div class="clock" id="clock">--:--:--</div>
+        </div>
+      </header>
+
+      <main class="main-content" id="overview">
+        <section class="hero">
+          <div>
+            <div class="eyebrow"><span class="eyebrow-line"></span> DNS SECURITY TELEMETRY</div>
+            <h1>See the signal.<br><span class="accent">Stop the spoof.</span></h1>
+            <p class="hero-copy">A live view of gateway decisions, DNSSEC outcomes and query performance across your AegisDNS lab.</p>
+          </div>
+          <div class="hero-meta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg><span>SESSION METRICS</span><span style="color:var(--line)">/</span><span id="sessionDate">—</span></div>
+        </section>
+
+        <section class="metrics" aria-label="Session summary metrics">
+          <article class="metric-card" style="--metric-color:var(--text);--glow:rgba(240,242,233,.035)">
+            <div class="metric-top"><span class="metric-label">Queries observed</span><span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16M4 12h10M4 19h7" stroke-linecap="round"/><circle cx="18" cy="17" r="3"/><path d="m20.2 19.2 1.3 1.3" stroke-linecap="round"/></svg></span></div>
+            <div id="total" class="metric-value">0</div><div class="metric-foot"><span class="tiny-mark"></span> Since this page opened</div>
+          </article>
+          <article class="metric-card" style="--metric-color:var(--acid);--glow:rgba(200,241,105,.07)">
+            <div class="metric-top"><span class="metric-label">Authenticated</span><span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3 19 6v5c0 4.5-3 7.5-7 9.5C8 18.5 5 15.5 5 11V6l7-3Z"/><path d="m8.5 11.7 2.2 2.2 4.7-4.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+            <div id="secure" class="metric-value" style="color:var(--acid)">0</div><div class="metric-foot"><span class="tiny-mark"></span> DNSSEC validated · AD=1</div>
+          </article>
+          <article class="metric-card" style="--metric-color:var(--amber);--glow:rgba(243,180,94,.07)">
+            <div class="metric-top"><span class="metric-label">Unsigned / insecure</span><span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v6m0 3h.01" stroke-linecap="round"/></svg></span></div>
+            <div id="insecure" class="metric-value" style="color:var(--amber)">0</div><div class="metric-foot"><span class="tiny-mark"></span> Not authenticated by DNSSEC</div>
+          </article>
+          <article class="metric-card" style="--metric-color:var(--red);--glow:rgba(255,112,95,.07)">
+            <div class="metric-top"><span class="metric-label">Rejected / errors</span><span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3 22 20H2L12 3Z" stroke-linejoin="round"/><path d="M12 9v5m0 3h.01" stroke-linecap="round"/></svg></span></div>
+            <div id="blocked" class="metric-value" style="color:var(--red)">0</div><div class="metric-foot"><span class="tiny-mark"></span> Bogus · policy block · error</div>
+          </article>
+        </section>
+
+        <section class="content-grid">
+          <article class="panel" id="latency">
+            <div class="panel-header">
+              <div><h2 class="panel-title">Query latency</h2><div class="panel-subtitle">Response time per observed DNS request</div></div>
+              <span class="panel-tag"><span class="tiny-mark"></span> ROLLING · 30 EVENTS</span>
+            </div>
+            <div class="chart-area"><canvas id="latencyChart" aria-label="Recent DNS query latency line chart" role="img"></canvas></div>
+            <div class="chart-foot"><span>Last <strong id="chartPointCount">0</strong> samples</span><span>Mean <strong id="avgLatency">—</strong></span><span>P95 <strong id="p95Latency">—</strong></span></div>
+          </article>
+
+          <div class="right-stack">
+            <article class="panel">
+              <div class="panel-header"><div><h2 class="panel-title">Outcome distribution</h2><div class="panel-subtitle">Current browser session</div></div><span class="panel-tag">LIVE</span></div>
+              <div class="distribution">
+                <div class="distribution-total"><strong id="distributionTotal">0</strong><span>events counted</span></div>
+                <div class="segmented-bar" aria-label="Distribution of DNS outcomes"><span id="secureSegment" class="segment secure-seg"></span><span id="insecureSegment" class="segment insecure-seg"></span><span id="blockedSegment" class="segment blocked-seg"></span></div>
+                <div class="legend-list">
+                  <div class="legend-row"><span class="legend-dot" style="--legend:var(--acid)"></span>Secure<strong id="securePercent">0%</strong></div>
+                  <div class="legend-row"><span class="legend-dot" style="--legend:var(--amber)"></span>Insecure<strong id="insecurePercent">0%</strong></div>
+                  <div class="legend-row"><span class="legend-dot" style="--legend:var(--red)"></span>Rejected / errors<strong id="blockedPercent">0%</strong></div>
+                </div>
+              </div>
+            </article>
+
+            <article class="panel" id="pipeline">
+              <div class="panel-header"><div><h2 class="panel-title">Request path</h2><div class="panel-subtitle">Configured AegisDNS flow</div></div><span class="panel-tag">LOCAL LAB</span></div>
+              <div class="pipeline"><div class="pipeline-steps">
+                <div class="pipeline-step"><span class="step-number">01</span><div><div class="step-name">IoT client</div><div class="step-detail">DNS query · TLS identity</div></div><span class="step-port">ESP32</span></div>
+                <div class="pipeline-step"><span class="step-number">02</span><div><div class="step-name">Aegis gateway</div><div class="step-detail">Policy · event telemetry</div></div><span class="step-port">:853</span></div>
+                <div class="pipeline-step"><span class="step-number">03</span><div><div class="step-name">Unbound resolver</div><div class="step-detail">DNSSEC validation</div></div><span class="step-port">:53</span></div>
+                <div class="pipeline-step"><span class="step-number">04</span><div><div class="step-name">Live console</div><div class="step-detail">Metrics via Socket.IO</div></div><span class="step-port">WS</span></div>
+              </div></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel events-panel" id="events">
+          <div class="event-header">
+            <div class="event-head-left"><div class="live-bars" id="liveBars" aria-hidden="true"><span></span><span></span><span></span></div><div><h2 class="panel-title">Security event stream</h2><div class="panel-subtitle">Newest events first · live gateway feed</div></div></div>
+            <div class="event-controls">
+              <label class="search-box" aria-label="Search events"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5" stroke-linecap="round"/></svg><input id="searchInput" type="search" placeholder="Find a domain…" autocomplete="off"></label>
+              <button id="pauseButton" class="control-btn" type="button" title="Pause updating the visible dashboard"><svg id="pauseIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 5v14M16 5v14" stroke-linecap="round"/></svg><span id="pauseLabel">Pause feed</span></button>
+              <button id="exportButton" class="control-btn primary" type="button" title="Export current session events as CSV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 17v3h14v-3" stroke-linecap="round" stroke-linejoin="round"/></svg>Export CSV</button>
+            </div>
+          </div>
+          <div class="filter-row" role="group" aria-label="Filter events by security outcome">
+            <span class="filter-label">FILTER</span>
+            <button class="filter-chip active" data-filter="ALL" type="button">All events <span id="filterAllCount" class="chip-num">0</span></button>
+            <button class="filter-chip" data-filter="SECURE" type="button">Secure <span id="filterSecureCount" class="chip-num">0</span></button>
+            <button class="filter-chip" data-filter="INSECURE" type="button">Insecure <span id="filterInsecureCount" class="chip-num">0</span></button>
+            <button class="filter-chip" data-filter="BLOCKED" type="button">Blocked / error <span id="filterBlockedCount" class="chip-num">0</span></button>
+            <span style="flex:1"></span>
+            <button id="clearButton" class="control-btn" type="button" title="Clear the visible session event history">Clear log</button>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Time</th><th>Domain</th><th>Type</th><th>Decision</th><th>Latency</th><th>Gateway CPU</th></tr></thead>
+            <tbody id="eventsBody"><tr><td colspan="6" class="empty-state"><strong>Waiting for telemetry</strong><span>Run <code>py scripts/test_gateway.py</code> to send your first test queries.</span></td></tr></tbody>
+          </table></div>
+          <div class="event-footer"><div class="footer-status"><span class="tiny-mark"></span><span id="feedSummary">Listening for gateway events</span></div><div class="footer-right"><span id="visibleCount">0</span> shown <span style="padding:0 5px;color:var(--line)">/</span> <span id="storedCount">0</span> in session log</div></div>
+        </section>
+
+        <footer class="bottom-note"><span><strong>AEGISDNS</strong> · Authenticated Gateway-Assisted DNSSEC</span><span>Live metrics are session-only · no historical database configured</span></footer>
+      </main>
+    </div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      'use strict';
+      const socket = io();
+      const MAX_POINTS = 30;
+      const MAX_HISTORY = 500;
+      const BLOCKED_STATUSES = new Set(['BOGUS', 'ERROR', 'BLOCKED_CD']);
+      const counts = { total: 0, secure: 0, insecure: 0, blocked: 0 };
+      const history = [];
+      const chartLabels = [];
+      const chartValues = [];
+      let activeFilter = 'ALL';
+      let searchTerm = '';
+      let paused = false;
+      let pending = [];
+      let toastTimer;
+
+      const byId = id => document.getElementById(id);
+      const chartCanvas = byId('latencyChart');
+      const chartCtx = chartCanvas.getContext('2d');
+      const gradient = chartCtx.createLinearGradient(0, 0, 0, 270);
+      gradient.addColorStop(0, 'rgba(200, 241, 105, .20)');
+      gradient.addColorStop(1, 'rgba(200, 241, 105, .005)');
+
+      const chart = new Chart(chartCanvas, {
+        type: 'line',
+        data: { labels: chartLabels, datasets: [{
+          label: 'Latency', data: chartValues, borderColor: '#c8f169', backgroundColor: gradient,
+          fill: true, borderWidth: 2, tension: .34, pointRadius: 2.5, pointHoverRadius: 5,
+          pointBackgroundColor: '#c8f169', pointBorderColor: '#181b16', pointBorderWidth: 2,
+          cubicInterpolationMode: 'monotone'
+        }] },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: { duration: 240 }, interaction: { intersect: false, mode: 'index' },
+          plugins: {
+            legend: { display: false },
+            tooltip: { backgroundColor: '#22271e', titleColor: '#f0f2e9', bodyColor: '#c8f169', borderColor: '#454d3b', borderWidth: 1, padding: 11, displayColors: false, callbacks: { label: item => ` ${Number(item.raw).toFixed(2)} ms` } }
+          },
+          scales: {
+            x: { border: { display: false }, ticks: { color: '#737b6a', maxTicksLimit: 6, maxRotation: 0, font: { size: 10 } }, grid: { color: 'rgba(65, 73, 56, .38)', drawTicks: false } },
+            y: { beginAtZero: true, border: { display: false, dash: [3, 4] }, ticks: { color: '#737b6a', maxTicksLimit: 5, padding: 8, font: { size: 10 } }, grid: { color: 'rgba(65, 73, 56, .38)', drawTicks: false }, title: { display: true, text: 'MILLISECONDS', color: '#737b6a', font: { size: 9, weight: 'bold' } } }
+          }
+        }
+      });
+
+      function formatTime(value) {
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? new Date().toLocaleTimeString() : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      }
+      function formatClock() { byId('clock').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+      function numeric(value) { const n = Number(value); return Number.isFinite(n) ? n : 0; }
+      function isBlocked(status) { return BLOCKED_STATUSES.has(status); }
+      function toast(message) {
+        byId('toast').textContent = message;
+        byId('toast').classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => byId('toast').classList.remove('show'), 2500);
+      }
+      function animateCard(el) {
+        const card = el.closest('.metric-card');
+        if (!card) return;
+        card.classList.remove('flash');
+        void card.offsetWidth;
+        card.classList.add('flash');
+      }
+
+      function updateCounters() {
+        const map = [['total', counts.total], ['secure', counts.secure], ['insecure', counts.insecure], ['blocked', counts.blocked]];
+        map.forEach(([id, value]) => { byId(id).textContent = value.toLocaleString(); });
+        byId('distributionTotal').textContent = counts.total.toLocaleString();
+        byId('navEventCount').textContent = counts.total > 999 ? '999+' : String(counts.total);
+        const ratio = value => counts.total ? (value / counts.total * 100) : 0;
+        const secureP = ratio(counts.secure), insecureP = ratio(counts.insecure), blockedP = ratio(counts.blocked);
+        byId('securePercent').textContent = `${Math.round(secureP)}%`;
+        byId('insecurePercent').textContent = `${Math.round(insecureP)}%`;
+        byId('blockedPercent').textContent = `${Math.round(blockedP)}%`;
+        byId('secureSegment').style.width = `${secureP}%`;
+        byId('insecureSegment').style.width = `${insecureP}%`;
+        byId('blockedSegment').style.width = `${blockedP}%`;
+        byId('filterAllCount').textContent = String(history.length);
+        byId('filterSecureCount').textContent = String(history.filter(m => m.status === 'SECURE').length);
+        byId('filterInsecureCount').textContent = String(history.filter(m => m.status === 'INSECURE').length);
+        byId('filterBlockedCount').textContent = String(history.filter(m => isBlocked(m.status)).length);
+      }
+
+      function updateLatency() {
+        const recent = chartValues.slice();
+        byId('chartPointCount').textContent = String(recent.length);
+        if (!recent.length) {
+          byId('avgLatency').textContent = '—';
+          byId('p95Latency').textContent = '—';
+          return;
+        }
+        const avg = recent.reduce((sum, n) => sum + n, 0) / recent.length;
+        const sorted = recent.slice().sort((a, b) => a - b);
+        const p95 = sorted[Math.max(0, Math.ceil(sorted.length * .95) - 1)];
+        byId('avgLatency').textContent = `${avg.toFixed(2)} ms`;
+        byId('p95Latency').textContent = `${p95.toFixed(2)} ms`;
+      }
+
+      function emptyRow(title, detail) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 6;
+        cell.className = 'empty-state';
+        const strong = document.createElement('strong'); strong.textContent = title;
+        const span = document.createElement('span'); span.textContent = detail;
+        cell.append(strong, span); row.appendChild(cell); return row;
+      }
+
+      function renderHistory(newestId = null) {
+        const body = byId('eventsBody');
+        body.replaceChildren();
+        const visible = history.filter(metric => {
+          const filterMatch = activeFilter === 'ALL' || (activeFilter === 'BLOCKED' ? isBlocked(metric.status) : metric.status === activeFilter);
+          const searchable = `${metric.query} ${metric.type} ${metric.status}`.toLowerCase();
+          return filterMatch && searchable.includes(searchTerm);
+        });
+        if (!visible.length) {
+          const message = history.length ? 'No events match these filters' : 'Waiting for telemetry';
+          const detail = history.length ? 'Try another outcome filter or search term.' : 'Run py scripts/test_gateway.py to send your first test queries.';
+          body.appendChild(emptyRow(message, detail));
+        } else {
+          visible.forEach(metric => {
+            const row = document.createElement('tr');
+            if (metric._id === newestId) row.classList.add('new-event');
+            const cells = [];
+            const time = document.createElement('td'); time.className = 'time-cell'; time.textContent = formatTime(metric.timestamp); cells.push(time);
+            const domain = document.createElement('td'); domain.className = 'domain-cell'; domain.textContent = metric.query; cells.push(domain);
+            const type = document.createElement('td'); const typeBadge = document.createElement('span'); typeBadge.className = 'record-type'; typeBadge.textContent = metric.type; type.appendChild(typeBadge); cells.push(type);
+            const decision = document.createElement('td'); const decisionLabel = document.createElement('span'); decisionLabel.className = `decision ${metric.status}`; decisionLabel.textContent = metric.status; decision.appendChild(decisionLabel); cells.push(decision);
+            const latency = document.createElement('td'); latency.className = 'latency-value'; latency.textContent = `${numeric(metric.latency_ms).toFixed(2)} ms`;
+            const track = document.createElement('span'); track.className = 'latency-track'; track.setAttribute('aria-hidden', 'true');
+            const fill = document.createElement('span'); fill.className = 'latency-fill';
+            const width = Math.max(3, Math.min(100, numeric(metric.latency_ms) / Math.max(1, ...chartValues) * 100));
+            fill.style.setProperty('--fill-width', `${width}%`); fill.style.width = `${width}%`; track.appendChild(fill); latency.appendChild(track); cells.push(latency);
+            const cpu = document.createElement('td'); cpu.className = 'cpu-cell'; cpu.textContent = `${numeric(metric.cpu_percent).toFixed(1)}%`; cells.push(cpu);
+            cells.forEach(cell => row.appendChild(cell)); body.appendChild(row);
+          });
+        }
+        byId('visibleCount').textContent = String(visible.length);
+        byId('storedCount').textContent = String(history.length);
+        updateCounters();
+      }
+
+      function processMetric(input) {
+        const metric = {
+          timestamp: typeof input.timestamp === 'string' ? input.timestamp : new Date().toISOString(),
+          query: typeof input.query === 'string' ? input.query.slice(0, 253) : 'unknown',
+          type: typeof input.type === 'string' ? input.type.slice(0, 20) : 'UNKNOWN',
+          status: typeof input.status === 'string' ? input.status : 'ERROR',
+          latency_ms: Math.max(0, numeric(input.latency_ms)),
+          cpu_percent: Math.max(0, Math.min(100, numeric(input.cpu_percent))),
+          _id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+        };
+        counts.total++;
+        if (metric.status === 'SECURE') counts.secure++;
+        else if (metric.status === 'INSECURE') counts.insecure++;
+        else counts.blocked++;
+        history.unshift(metric);
+        if (history.length > MAX_HISTORY) history.length = MAX_HISTORY;
+        chartLabels.push(formatTime(metric.timestamp));
+        chartValues.push(metric.latency_ms);
+        if (chartLabels.length > MAX_POINTS) { chartLabels.shift(); chartValues.shift(); }
+        chart.update('none');
+        updateLatency();
+        updateCounters();
+        ['total', metric.status === 'SECURE' ? 'secure' : metric.status === 'INSECURE' ? 'insecure' : 'blocked'].forEach(id => animateCard(byId(id)));
+        renderHistory(metric._id);
+        byId('feedSummary').textContent = `${counts.total} event${counts.total === 1 ? '' : 's'} observed this session`;
+      }
+
+      socket.on('connect', () => {
+        byId('connectionDot').className = 'state-dot connected';
+        byId('connectionText').textContent = 'Telemetry connected';
+        byId('feedSummary').textContent = 'Live feed connected · awaiting events';
+      });
+      socket.on('disconnect', () => {
+        byId('connectionDot').className = 'state-dot offline';
+        byId('connectionText').textContent = 'Feed disconnected';
+        byId('feedSummary').textContent = 'Connection lost · reconnecting automatically';
+      });
+      socket.on('connect_error', () => {
+        byId('connectionDot').className = 'state-dot offline';
+        byId('connectionText').textContent = 'Connection retrying';
+      });
+      socket.on('dns_metric', metric => {
+        if (!metric || typeof metric !== 'object') return;
+        if (paused) {
+          pending.push(metric);
+          if (pending.length > 1000) pending.shift();
+          byId('feedSummary').textContent = `Feed paused · ${pending.length} event${pending.length === 1 ? '' : 's'} buffered`;
+          return;
+        }
+        processMetric(metric);
+      });
+
+      document.querySelectorAll('[data-filter]').forEach(button => {
+        button.addEventListener('click', () => {
+          activeFilter = button.dataset.filter;
+          document.querySelectorAll('[data-filter]').forEach(item => item.classList.toggle('active', item === button));
+          renderHistory();
+        });
+      });
+      byId('searchInput').addEventListener('input', event => {
+        searchTerm = event.target.value.trim().toLowerCase();
+        renderHistory();
+      });
+      byId('clearButton').addEventListener('click', () => {
+        history.length = 0;
+        renderHistory();
+        toast('Session event log cleared. Counters and chart are unchanged.');
+      });
+      byId('pauseButton').addEventListener('click', () => {
+        paused = !paused;
+        byId('liveBars').classList.toggle('paused', paused);
+        byId('pauseLabel').textContent = paused ? 'Resume feed' : 'Pause feed';
+        byId('pauseIcon').innerHTML = paused
+          ? '<path d="m8 5 11 7-11 7V5Z" stroke-linejoin="round"/>'
+          : '<path d="M8 5v14M16 5v14" stroke-linecap="round"/>';
+        byId('pauseButton').classList.toggle('primary', paused);
+        if (!paused && pending.length) {
+          const queued = pending.splice(0);
+          queued.forEach(processMetric);
+          toast(`Feed resumed · ${queued.length} buffered event${queued.length === 1 ? '' : 's'} processed`);
+        } else {
+          byId('feedSummary').textContent = paused ? 'Feed paused · incoming events are buffered' : `${counts.total} events observed this session`;
+        }
+      });
+      byId('exportButton').addEventListener('click', () => {
+        if (!history.length) { toast('No event history to export yet.'); return; }
+        const columns = ['timestamp', 'query', 'type', 'status', 'latency_ms', 'cpu_percent'];
+        const quote = value => `"${String(value ?? '').replace(/"/g, '""')}"`;
+        const csv = [columns.join(','), ...history.slice().reverse().map(row => columns.map(key => quote(row[key])).join(','))].join('\r\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a'); link.href = url; link.download = `aegisdns-events-${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
+        document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+        toast('CSV export prepared.');
+      });
+
+      document.querySelectorAll('[data-nav]').forEach(link => link.addEventListener('click', () => {
+        document.querySelectorAll('[data-nav]').forEach(item => item.classList.toggle('active', item === link));
+      }));
+      byId('sessionDate').textContent = new Date().toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+      formatClock(); setInterval(formatClock, 1000);
+      updateCounters(); updateLatency();
+    })();
+  </script>
+</body>
+</html>

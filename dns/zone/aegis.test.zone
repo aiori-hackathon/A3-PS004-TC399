@@ -1,0 +1,18 @@
+$ORIGIN aegis.test.
+$TTL 300
+@ IN SOA ns.aegis.test. hostmaster.aegis.test. (
+    2026102101 ; serial
+    3600       ; refresh
+    900        ; retry
+    604800     ; expire
+    300        ; negative cache TTL
+)
+@       IN NS ns.aegis.test.
+ns      IN A  172.28.0.10
+valid   IN A  192.0.2.10
+bogus   IN A  192.0.2.20
+
+; This is an intentionally unsigned child delegation.
+; The parent has an NS RRset and glue but deliberately no DS RRset.
+insecure       IN NS ns.insecure.aegis.test.
+ns.insecure    IN A  172.28.0.10

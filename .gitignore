@@ -1,0 +1,58 @@
+# ==========================================
+# AegisDNS — Secrets and generated files
+# ==========================================
+
+# Environment configuration
+.env
+.env.*
+!.env.example
+
+# Private keys and certificate material
+*.key
+*.private
+*.pem
+*.p12
+*.pfx
+*.csr
+*.srl
+
+# Generated DNSSEC keys, signed zones and trust anchors
+dns/generated/*
+!dns/generated/.gitkeep
+
+# Generated PKI and device credentials
+pki/*
+!pki/.gitkeep
+
+esp32/certs/*
+!esp32/certs/.gitkeep
+
+# ==========================================
+# Python
+# ==========================================
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# ==========================================
+# Node.js
+# ==========================================
+
+node_modules/
+npm-debug.log*  
+.npm/
+
+# ==========================================
+# Operating system and editors
+# ==========================================
+
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local dashboard backups
+dashboard/public/index.backup.html
