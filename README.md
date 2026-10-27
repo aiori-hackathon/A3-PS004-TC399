@@ -88,7 +88,7 @@ Python gateway -- HTTP POST /api/metrics --> Express + Socket.io
     documented protocol and policy.
 
 The current local test path exercises the Docker-based resolver and
-gateway using `scripts/test_gateway.py`. ESP32 is the target hardware
+gateway using `src/scripts/test_gateway.py`. ESP32 is the target hardware
 client; its real hardware integration is not yet verified.
 
 ### Important trust boundary
@@ -105,44 +105,65 @@ validation by the IoT client.
 
 ``` text
 AegisDNS/
-├── docker-compose.yml
 ├── .env.example
 ├── .gitignore
+├── .gitattributes
 ├── README.md
 ├── README_SHORT.txt
-├── dns/
-│   ├── Dockerfile
-│   ├── named.conf
-│   ├── scripts/setup-zone.sh
-│   └── zone/
-│       ├── aegis.test.zone
-│       └── insecure.aegis.test.zone
-├── resolver/
-│   ├── Dockerfile
-│   ├── start-unbound.sh
-│   └── unbound.conf
-├── gateway/
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   └── gateway.py
-├── dashboard/
-│   ├── Dockerfile
-│   ├── package.json
-│   ├── server.js
-│   └── public/index.html
-├── scripts/test_gateway.py
-├── tools/certgen/
-│   ├── Dockerfile
-│   └── generate-certs.sh
-└── esp32/
-    ├── src/main.cpp
-    └── certs/                 # local device certificate files; ignored by Git
+├── A3-PS004-TC399.pdf
+└── src/
+    ├── README.md
+    ├── docker-compose.yml
+    ├── dns/
+    │   ├── Dockerfile
+    │   ├── named.conf
+    │   ├── scripts/setup-zone.sh
+    │   └── zone/
+    │       ├── aegis.test.zone
+    │       └── insecure.aegis.test.zone
+    ├── resolver/
+    │   ├── Dockerfile
+    │   ├── start-unbound.sh
+    │   └── unbound.conf
+    ├── gateway/
+    │   ├── Dockerfile
+    │   ├── requirements.txt
+    │   └── gateway.py
+    ├── dashboard/
+    │   ├── Dockerfile
+    │   ├── package.json
+    │   ├── server.js
+    │   └── public/index.html
+    ├── scripts/test_gateway.py
+    ├── tools/certgen/
+    │   ├── Dockerfile
+    │   └── generate-certs.sh
+    ├── pki/                  # generated local certificates; ignored by Git
+    └── esp32/
+        ├── src/main.cpp
+        └── certs/             # local device certificate files; ignored by Git
 ```
 
-Generated DNSSEC material is written beneath `dns/generated/`; local
-TLS/PKI files are under `pki/`. These generated and private files must
-not be committed. The layout above describes the current project
+All application folders and Docker configuration are under `src/`.
+Generated DNSSEC material is written beneath `src/dns/generated/`; local
+TLS/PKI files are under `src/pki/`. These generated and private files
+must not be committed. The layout above describes the current project
 structure; update it if repository files change.
+
+### What changed and where to run commands
+
+- The application folders (`dashboard`, `dns`, `esp32`, `gateway`,
+  `pki`, `resolver`, `scripts`, and `tools`) and
+  `docker-compose.yml` are now inside `src/`.
+- The root contains the README files, `.env.example`, and project PDF.
+  Create and keep your local `.env` at the root beside `src/`.
+- `.gitattributes` keeps shell scripts in LF format so their Docker
+  entrypoints work after Windows checkouts.
+- Run Docker and Python commands from the repository root, not from
+  `src/`. Use `-f src/docker-compose.yml` when running Compose.
+- The Compose project name is pinned to `a3-ps004-tc399` to reuse this
+  project's existing Docker network. Keep this name unless you also
+  plan a network migration.
 
 ## 3. Prerequisites
 
@@ -163,7 +184,7 @@ structure; update it if repository files change.
 BIND9, Unbound, Node.js, and the gateway's Python dependencies run in
 containers; they do not need to be installed directly on Windows for the
 documented Docker workflow. Python is required on the host to run
-`scripts/test_gateway.py` as currently provided.
+`src/scripts/test_gateway.py` as currently provided.
 
 The initial verified local environment is Windows 11 with Docker
 Desktop. Other operating systems and ESP32 board/framework combinations
@@ -171,14 +192,16 @@ should be tested rather than assumed compatible.
 
 ## 4. Run Locally on Windows
 
-Open PowerShell in the repository directory. Examples assume
+Open PowerShell in the repository root (the directory containing
+`.env.example`, `README.md`, and `src/`). Examples assume
 `D:\AegisDNS`; adjust the path if you cloned the repository elsewhere.
+All Compose commands explicitly use `src/docker-compose.yml`.
 
 ### 4.1 Configure the environment
 
 ``` powershell
 cd D:\AegisDNS
-Copy-Item .env.example .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
 If `.env` already exists, **do not overwrite it**. Review `.env.example`
@@ -187,29 +210,33 @@ for supported settings. Keep `.env` local; it is ignored by Git.
 ### 4.2 Generate local development certificates
 
 ``` powershell
-docker compose --profile tools run --rm certgen
+docker compose --env-file .env -f src/docker-compose.yml --profile tools run --build --rm certgen
 ```
 
-This generates local TLS and client credentials beneath `pki/`. The CA
+This generates local TLS and client credentials beneath `src/pki/`. The CA
 private key and client/server private keys are secrets; do not commit
 them or send them through GitHub. Regenerate certificates if the
 configured gateway hostname/address or certificate settings change.
+After generation, the certificate paths `src/pki/rootCA.crt`,
+`src/pki/server.crt`, and `src/pki/server.key` must be files, not
+directories. The `--build` option ensures the certificate generator
+image contains the current LF-formatted script.
 
 ### 4.3 Build and start the stack
 
 ``` powershell
-docker compose up --build -d
-docker compose ps
+docker compose --env-file .env -f src/docker-compose.yml up --build -d
+docker compose --env-file .env -f src/docker-compose.yml ps
 ```
 
 Expected services are `authoritative`, `resolver`, `gateway`, and
 `dashboard`. Check startup logs if a service is restarting:
 
 ``` powershell
-docker compose logs --tail 100 authoritative
-docker compose logs --tail 100 resolver
-docker compose logs --tail 100 gateway
-docker compose logs --tail 100 dashboard
+docker compose --env-file .env -f src/docker-compose.yml logs --tail 100 authoritative
+docker compose --env-file .env -f src/docker-compose.yml logs --tail 100 resolver
+docker compose --env-file .env -f src/docker-compose.yml logs --tail 100 gateway
+docker compose --env-file .env -f src/docker-compose.yml logs --tail 100 dashboard
 ```
 
 -   Dashboard: http://localhost:3000
@@ -219,15 +246,50 @@ docker compose logs --tail 100 dashboard
 
 Do not expose the resolver or authoritative DNS service publicly.
 
+### Docker command reference
+
+Run these commands from the repository root (the folder containing
+`.env.example` and `src/`). Docker Desktop must be running. If `.env`
+does not exist yet, create it once with:
+
+``` powershell
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+```
+
+``` powershell
+# Generate local certificates (first run, or when renewing them)
+docker compose --env-file .env -f src/docker-compose.yml --profile tools run --build --rm certgen
+
+# Build images and start all services
+docker compose --env-file .env -f src/docker-compose.yml up --build -d
+
+# Check service status
+docker compose --env-file .env -f src/docker-compose.yml ps
+
+# Follow logs for all services, or replace with a service name
+docker compose --env-file .env -f src/docker-compose.yml logs -f
+docker compose --env-file .env -f src/docker-compose.yml logs -f gateway
+
+# Restart/rebuild one service after changing its source
+docker compose --env-file .env -f src/docker-compose.yml up -d --build --force-recreate gateway
+
+# Stop and remove the project's containers and network
+docker compose --env-file .env -f src/docker-compose.yml down
+```
+
+Replace `gateway` in the logs or rebuild command with `dashboard`,
+`resolver`, or `authoritative` as needed. `down` keeps generated
+certificates and DNS data in `src/`.
+
 ## 5. Verify DNSSEC Outcomes
 
 Run these commands from PowerShell. The quotes around `@127.0.0.1` are
 important because `@` has special syntax in PowerShell.
 
 ``` powershell
-docker compose exec resolver dig '@127.0.0.1' valid.aegis.test A +dnssec
-docker compose exec resolver dig '@127.0.0.1' bogus.aegis.test A +dnssec
-docker compose exec resolver dig '@127.0.0.1' insecure.aegis.test A +dnssec
+docker compose --env-file .env -f src/docker-compose.yml exec resolver dig '@127.0.0.1' valid.aegis.test A +dnssec
+docker compose --env-file .env -f src/docker-compose.yml exec resolver dig '@127.0.0.1' bogus.aegis.test A +dnssec
+docker compose --env-file .env -f src/docker-compose.yml exec resolver dig '@127.0.0.1' insecure.aegis.test A +dnssec
 ```
 
 ### Expected controlled-lab results
@@ -260,7 +322,7 @@ used to demonstrate the bogus path.
 Keep the Docker stack running and execute:
 
 ``` powershell
-py scripts/test_gateway.py
+py src/scripts/test_gateway.py
 ```
 
 The script queries the three controlled domains and sends a query with
@@ -280,15 +342,15 @@ broadcast to browsers through Socket.io as the `dns_metric` event.
 Useful checks:
 
 ``` powershell
-docker compose ps
-docker compose logs --tail 60 gateway
-docker compose logs --tail 60 dashboard
+docker compose --env-file .env -f src/docker-compose.yml ps
+docker compose --env-file .env -f src/docker-compose.yml logs --tail 60 gateway
+docker compose --env-file .env -f src/docker-compose.yml logs --tail 60 dashboard
 ```
 
 If only the dashboard is being changed, rebuild that service:
 
 ``` powershell
-docker compose up -d --build --force-recreate dashboard
+docker compose --env-file .env -f src/docker-compose.yml up -d --build --force-recreate dashboard
 ```
 
 Then hard-refresh the browser with **Ctrl+F5**.
@@ -303,7 +365,7 @@ decisions.
 
 ## 7. ESP32 Integration and Teammate Handoff
 
-The current firmware source is `esp32/src/main.cpp`. It uses
+The current firmware source is `src/esp32/src/main.cpp`. It uses
 `WiFiClientSecure`, implements DNS-over-TLS framing with a 2-byte
 message-length prefix, sends DNS A queries, and prints response status
 and query latency over Serial. **Physical ESP32 integration is pending
@@ -314,7 +376,7 @@ board.**
 
 1.  Install Arduino IDE and the `esp32` board package by Espressif
     Systems.
-2.  Open `esp32/src/main.cpp` in an Arduino-ESP32 project and select the
+2.  Open `src/esp32/src/main.cpp` in an Arduino-ESP32 project and select the
     correct board and serial port when hardware is available.
 3.  Set the Wi-Fi SSID and password locally.
 4.  Use a **device-specific client certificate and private key** issued
@@ -388,8 +450,8 @@ git clone https://github.com/<OWNER>/AegisDNS.git
 cd AegisDNS
 git switch -c feature/esp32-integration
 Copy-Item .env.example .env
-docker compose --profile tools run --rm certgen
-docker compose up --build -d
+docker compose --env-file .env -f src/docker-compose.yml --profile tools run --rm certgen
+docker compose --env-file .env -f src/docker-compose.yml up --build -d
 ```
 
 If a teammate is working on firmware without access to the ESP32 yet,
@@ -401,7 +463,7 @@ authorized credentials.
 
 ``` powershell
 git status
-git add esp32/src/main.cpp
+git add src/esp32/src/main.cpp
 git commit -m "feat(esp32): improve gateway client"
 git push -u origin feature/esp32-integration
 ```
@@ -409,7 +471,7 @@ git push -u origin feature/esp32-integration
 Stage only the files relevant to your change. Open a pull request to
 merge the feature branch into `main`. For dashboard work, use a separate
 branch such as `feature/dashboard-ui` and stage the relevant
-`dashboard/` files.
+`src/dashboard/` files.
 
 Before every push, check for accidentally staged secrets:
 
@@ -525,35 +587,67 @@ and independent validation strategies.
 Start Docker Desktop, open a new terminal, and check `docker --version`
 and `docker info`.
 
+**Docker reports `Pool overlaps with other one on this address space`**\
+Confirm that you are running Compose from the repository root and using
+`-f src/docker-compose.yml`. This file pins the project name so it
+reuses the AegisDNS network. If the error continues, another Docker
+network may be using the configured `172.28.0.0/24` subnet. Check
+`docker network ls` and inspect the relevant network before changing
+anything. Do not remove or prune networks belonging to other projects.
+The subnet is paired with static service IPs in `src/docker-compose.yml`;
+changing it requires updating those addresses and the gateway's resolver
+address together.
+
+**Container says `bash\r` or a startup script cannot be found**\
+The shell scripts should use LF line endings, enforced by the root
+`.gitattributes`. Rebuild the affected image from the repository root:
+
+``` powershell
+docker compose --env-file .env -f src/docker-compose.yml up --build --force-recreate -d
+```
+
 **Authoritative container restarts or zone does not load**\
-Inspect `docker compose logs --tail 100 authoritative`. The signed test
+Inspect `docker compose --env-file .env -f src/docker-compose.yml logs --tail 100 authoritative`. The signed test
 zone must load without syntax errors.
 
 **PowerShell errors on `@127.0.0.1`**\
 Quote the argument: `dig '@127.0.0.1' ...`.
 
 **Valid name returns `NXDOMAIN` from Unbound**\
-Check `resolver/unbound.conf`, especially the
+Check `src/resolver/unbound.conf`, especially the
 `local-zone: "test." transparent` setting and the `stub-zone` for
 `aegis.test.`. Validate the configuration with:
 
 ``` powershell
-docker compose exec resolver unbound-checkconf /etc/unbound/unbound.conf
+docker compose --env-file .env -f src/docker-compose.yml exec resolver unbound-checkconf /etc/unbound/unbound.conf
 ```
 
 Then inspect resolver logs.
 
+**Gateway test reports `Permission denied` or the gateway keeps restarting**\
+Check `docker compose --env-file .env -f src/docker-compose.yml ps` and
+the gateway logs. If certificate generation was skipped or failed, run:
+
+``` powershell
+docker compose --env-file .env -f src/docker-compose.yml --profile tools run --build --rm certgen
+docker compose --env-file .env -f src/docker-compose.yml up --build --force-recreate -d
+```
+
+Then confirm `src/pki/server.crt`, `src/pki/server.key`, and
+`src/pki/rootCA.crt` are files, not directories. Never commit the private
+keys.
+
 **Gateway returns `SERVFAIL` for every name**\
-Inspect `docker compose logs --tail 100 gateway`. Confirm resolver
+Inspect `docker compose --env-file .env -f src/docker-compose.yml logs --tail 100 gateway`. Confirm resolver
 host/port environment settings and ensure code changes were rebuilt:
 
 ``` powershell
-docker compose up -d --build --force-recreate gateway
+docker compose --env-file .env -f src/docker-compose.yml up -d --build --force-recreate gateway
 ```
 
 **No events appear on the dashboard**\
 Keep the gateway and dashboard running, execute
-`py scripts/test_gateway.py`, and inspect both service logs. Confirm
+`py src/scripts/test_gateway.py`, and inspect both service logs. Confirm
 that the gateway's metrics URL uses the Compose service name for the
 dashboard when called from inside Docker.
 

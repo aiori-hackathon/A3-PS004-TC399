@@ -1,7 +1,8 @@
 """Standard-library end-to-end smoke test for the AegisDNS DoT listener.
 
-Run from the project root after `docker compose up --build -d`:
-    py scripts/test_gateway.py
+Run from the project root after starting the stack with
+`docker compose --env-file .env -f src/docker-compose.yml up --build -d`:
+    py src/scripts/test_gateway.py
 It uses the local CA and demo client certificate created by certgen.
 """
 

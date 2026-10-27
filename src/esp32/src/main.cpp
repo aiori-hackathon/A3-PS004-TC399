@@ -11,8 +11,8 @@ const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
 const char* GATEWAY_HOST = "aegisdns.local"; // Must resolve to your PC IP and match the certificate DNS SAN
 const uint16_t GATEWAY_PORT = 853;
 
-// Paste the contents of pki/rootCA.crt, pki/esp32-client.crt and
-// pki/esp32-client.key into these PEM strings. Never paste rootCA.key here.
+// Paste the contents of src/pki/rootCA.crt, src/pki/esp32-client.crt and
+// src/pki/esp32-client.key into these PEM strings. Never paste rootCA.key here.
 static const char* ROOT_CA = R"PEM(
 -----BEGIN CERTIFICATE-----
 PASTE_ROOT_CA_CERTIFICATE_HERE

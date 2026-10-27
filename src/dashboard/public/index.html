@@ -420,7 +420,7 @@
           </div>
           <div class="table-wrap"><table>
             <thead><tr><th>Time</th><th>Domain</th><th>Type</th><th>Decision</th><th>Latency</th><th>Gateway CPU</th></tr></thead>
-            <tbody id="eventsBody"><tr><td colspan="6" class="empty-state"><strong>Waiting for telemetry</strong><span>Run <code>py scripts/test_gateway.py</code> to send your first test queries.</span></td></tr></tbody>
+            <tbody id="eventsBody"><tr><td colspan="6" class="empty-state"><strong>Waiting for telemetry</strong><span>Run <code>py src/scripts/test_gateway.py</code> to send your first test queries.</span></td></tr></tbody>
           </table></div>
           <div class="event-footer"><div class="footer-status"><span class="tiny-mark"></span><span id="feedSummary">Listening for gateway events</span></div><div class="footer-right"><span id="visibleCount">0</span> shown <span style="padding:0 5px;color:var(--line)">/</span> <span id="storedCount">0</span> in session log</div></div>
         </section>
@@ -551,7 +551,7 @@
         });
         if (!visible.length) {
           const message = history.length ? 'No events match these filters' : 'Waiting for telemetry';
-          const detail = history.length ? 'Try another outcome filter or search term.' : 'Run py scripts/test_gateway.py to send your first test queries.';
+          const detail = history.length ? 'Try another outcome filter or search term.' : 'Run py src/scripts/test_gateway.py to send your first test queries.';
           body.appendChild(emptyRow(message, detail));
         } else {
           visible.forEach(metric => {

@@ -17,15 +17,15 @@
 *.srl
 
 # Generated DNSSEC keys, signed zones and trust anchors
-dns/generated/*
-!dns/generated/.gitkeep
+src/dns/generated/*
+!src/dns/generated/.gitkeep
 
 # Generated PKI and device credentials
-pki/*
-!pki/.gitkeep
+src/pki/*
+!src/pki/.gitkeep
 
-esp32/certs/*
-!esp32/certs/.gitkeep
+src/esp32/certs/*
+!src/esp32/certs/.gitkeep
 
 # ==========================================
 # Python
@@ -55,4 +55,4 @@ Thumbs.db
 .idea/
 
 # Local dashboard backups
-dashboard/public/index.backup.html
+src/dashboard/public/index.backup.html

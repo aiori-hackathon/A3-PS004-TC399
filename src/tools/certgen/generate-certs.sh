@@ -64,5 +64,5 @@ openssl x509 -req -sha256 \
 
 chmod 600 "$OUT/rootCA.key" "$OUT/server.key" "$OUT/esp32-client.key"
 chmod 644 "$OUT/rootCA.crt" "$OUT/server.crt" "$OUT/esp32-client.crt"
-echo "[certgen] Certificates generated in ./pki"
-echo "[certgen] Root CA private key is sensitive; never commit ./pki to Git."
+echo "[certgen] Certificates generated in the mounted src/pki directory."
+echo "[certgen] Root CA private key is sensitive; never commit src/pki to Git."
