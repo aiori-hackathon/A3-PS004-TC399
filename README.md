@@ -108,6 +108,7 @@ AegisDNS/
 ├── .env.example
 ├── .gitignore
 ├── .gitattributes
+├── requirements.txt
 ├── README.md
 ├── README_SHORT.txt
 ├── A3-PS004-TC399.pdf
@@ -127,7 +128,6 @@ AegisDNS/
     │   └── unbound.conf
     ├── gateway/
     │   ├── Dockerfile
-    │   ├── requirements.txt
     │   └── gateway.py
     ├── dashboard/
     │   ├── Dockerfile
@@ -140,7 +140,10 @@ AegisDNS/
     │   └── generate-certs.sh
     ├── pki/                  # generated local certificates; ignored by Git
     └── esp32/
+        ├── platformio.ini
+        ├── include/secrets.h.example
         ├── src/main.cpp
+        ├── tools/gen_certs_header.ps1
         └── certs/             # local device certificate files; ignored by Git
 ```
 
@@ -155,8 +158,9 @@ structure; update it if repository files change.
 - The application folders (`dashboard`, `dns`, `esp32`, `gateway`,
   `pki`, `resolver`, `scripts`, and `tools`) and
   `docker-compose.yml` are now inside `src/`.
-- The root contains the README files, `.env.example`, and project PDF.
-  Create and keep your local `.env` at the root beside `src/`.
+- The root contains the README files, `.env.example`, `requirements.txt`,
+  and project PDF. Create and keep your local `.env` at the root beside
+  `src/`.
 - `.gitattributes` keeps shell scripts in LF format so their Docker
   entrypoints work after Windows checkouts.
 - Run Docker and Python commands from the repository root, not from
@@ -365,7 +369,28 @@ decisions.
 
 ## 7. ESP32 Integration and Teammate Handoff
 
-The current firmware source is `src/esp32/src/main.cpp`. It uses
+The PlatformIO project is `src/esp32/`, with firmware in
+`src/esp32/src/main.cpp`. PlatformIO installs the ESP32 Arduino framework,
+which provides the `Arduino.h`, `WiFi.h`, and `WiFiClientSecure.h` headers.
+No separate library paths are needed for those framework libraries.
+
+From the repository root, prepare the ignored local headers and build:
+
+``` powershell
+if (-not (Test-Path src\esp32\include\secrets.h)) {
+    Copy-Item src\esp32\include\secrets.h.example src\esp32\include\secrets.h
+}
+# Edit src\esp32\include\secrets.h with local Wi-Fi and gateway settings.
+powershell -File src\esp32\tools\gen_certs_header.ps1
+pio run -d src\esp32
+```
+
+The certificate script reads credentials from `src/pki/` and generates
+the ignored `src/esp32/include/certs.h`; it requires a client certificate
+and key as well as the CA certificate. Never commit or share the generated
+header because it contains the client private key.
+
+The firmware uses
 `WiFiClientSecure`, implements DNS-over-TLS framing with a 2-byte
 message-length prefix, sends DNS A queries, and prints response status
 and query latency over Serial. **Physical ESP32 integration is pending
@@ -374,34 +399,33 @@ board.**
 
 ### Firmware checklist
 
-1.  Install Arduino IDE and the `esp32` board package by Espressif
-    Systems.
-2.  Open `src/esp32/src/main.cpp` in an Arduino-ESP32 project and select the
-    correct board and serial port when hardware is available.
-3.  Set the Wi-Fi SSID and password locally.
-4.  Use a **device-specific client certificate and private key** issued
+1.  Open `src/esp32/` as a PlatformIO project; `platformio.ini` selects
+    the ESP32 Arduino framework and board.
+2.  Set the Wi-Fi SSID and password in the ignored local
+    `src/esp32/include/secrets.h`.
+3.  Use a **device-specific client certificate and private key** issued
     by the CA trusted by the gateway. The gateway requires mutual TLS.
-5.  Configure the public CA certificate used to validate the gateway
+4.  Configure the public CA certificate used to validate the gateway
     certificate, and verify the gateway hostname against a matching
-    certificate Subject Alternative Name (SAN).
-6.  Set the gateway endpoint to the laptop/server LAN IP and a hostname
+    certificate Subject Alternative Name (SAN); generate the ignored
+    `certs.h` with `src/esp32/tools/gen_certs_header.ps1`.
+5.  Set the gateway endpoint to the laptop/server LAN IP and a hostname
     covered by the gateway certificate. `localhost` on the ESP32 refers
     to the ESP32 itself, not the laptop.
-7.  Ensure the ESP32 and gateway host can reach each other (same LAN for
+6.  Ensure the ESP32 and gateway host can reach each other (same LAN for
     the initial test), TCP 853 is allowed by the host firewall, and the
     gateway is running.
-8.  Query `valid.aegis.test`, `bogus.aegis.test`, and
+7.  Query `valid.aegis.test`, `bogus.aegis.test`, and
     `insecure.aegis.test`; compare serial output with dashboard events.
-9.  Record board model, framework/library versions, connection result,
+8.  Record board model, framework/library versions, connection result,
     observed responses, and any memory or timing measurements.
 
 ### Credentials and collaboration warning
 
 Do **not** commit real certificate private keys, Wi-Fi passwords, or
-populated PEM secrets in tracked firmware source. The starter `main.cpp`
-contains placeholder PEM blocks; use local, ignored credentials or
-refactor them into a local ignored secrets header before inserting real
-credentials.
+populated PEM secrets in tracked firmware source. Keep Wi-Fi settings in
+the ignored `secrets.h` and certificate PEMs in the ignored generated
+`certs.h`; the latter contains a client private key.
 
 Never send the CA private key (`rootCA.key`) to a teammate or put it on
 GitHub. To test against another person's gateway, the device needs its

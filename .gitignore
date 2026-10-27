@@ -56,3 +56,8 @@ Thumbs.db
 
 # Local dashboard backups
 src/dashboard/public/index.backup.html
+
+# ESP32 local credentials and build output
+src/esp32/include/secrets.h
+src/esp32/include/certs.h
+src/esp32/.pio/

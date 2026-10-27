@@ -1,200 +1,126 @@
+// AegisDNS ESP32 client: DNS-over-TLS (mutual TLS) to the AegisDNS gateway.
+// There is intentionally NO plaintext/insecure fallback path in this file.
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-#include <cstring>
+#include <time.h>
+#include "secrets.h"   // Wi-Fi + gateway address (ignored by Git)
+#include "certs.h"     // CA_CERT, CLIENT_CERT, CLIENT_KEY (generated, ignored by Git)
 
-// Set these before flashing. The server certificate contains the DNS SAN
-// aegisdns.local. Configure a local DNS/mDNS mapping from this name to the PC
-// running Docker. Using the name ensures the TLS hostname check is meaningful.
-const char* WIFI_SSID = "YOUR_WIFI_SSID";
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
-const char* GATEWAY_HOST = "aegisdns.local"; // Must resolve to your PC IP and match the certificate DNS SAN
-const uint16_t GATEWAY_PORT = 853;
+static const char* NAMES[] = {"valid.aegis.test", "bogus.aegis.test", "insecure.aegis.test"};
+static const size_t NAME_COUNT = sizeof(NAMES) / sizeof(NAMES[0]);
 
-// Paste the contents of src/pki/rootCA.crt, src/pki/esp32-client.crt and
-// src/pki/esp32-client.key into these PEM strings. Never paste rootCA.key here.
-static const char* ROOT_CA = R"PEM(
------BEGIN CERTIFICATE-----
-PASTE_ROOT_CA_CERTIFICATE_HERE
------END CERTIFICATE-----
-)PEM";
+static WiFiClientSecure tls;
 
-static const char* CLIENT_CERT = R"PEM(
------BEGIN CERTIFICATE-----
-PASTE_ESP32_CLIENT_CERTIFICATE_HERE
------END CERTIFICATE-----
-)PEM";
-
-static const char* CLIENT_KEY = R"PEM(
------BEGIN PRIVATE KEY-----
-PASTE_ESP32_CLIENT_PRIVATE_KEY_HERE
------END PRIVATE KEY-----
-)PEM";
-
-const char* DOMAINS[] = {
-  "valid.aegis.test",
-  "bogus.aegis.test",
-  "insecure.aegis.test"
-};
-const size_t DOMAIN_COUNT = sizeof(DOMAINS) / sizeof(DOMAINS[0]);
-uint16_t nextDnsId = 1000;
-
-void put16(uint8_t* out, size_t& offset, uint16_t value) {
-  out[offset++] = static_cast<uint8_t>((value >> 8) & 0xff);
-  out[offset++] = static_cast<uint8_t>(value & 0xff);
+static bool syncTime() {
+  // TLS certificate validity checks need a correct clock.
+  configTime(0, 0, "pool.ntp.org", "time.google.com");
+  time_t now = 0;
+  uint32_t start = millis();
+  while (now < 1700000000 && millis() - start < 20000) { delay(250); time(&now); }
+  return now >= 1700000000;
 }
 
-uint16_t get16(const uint8_t* in, size_t offset) {
-  return (static_cast<uint16_t>(in[offset]) << 8) | in[offset + 1];
-}
-
-bool encodeName(const char* name, uint8_t* out, size_t& offset, size_t cap) {
-  const char* label = name;
-  while (*label) {
-    const char* dot = strchr(label, '.');
-    size_t n = dot ? static_cast<size_t>(dot - label) : strlen(label);
-    if (n == 0 || n > 63 || offset + n + 1 >= cap) return false;
-    out[offset++] = static_cast<uint8_t>(n);
-    memcpy(out + offset, label, n);
-    offset += n;
-    if (!dot) break;
-    label = dot + 1;
+// Builds [2-byte length][DNS message] for an A query with EDNS0 DO=1, CD=0, RD=1.
+static size_t buildQuery(const char* name, uint8_t* buf, size_t cap, uint16_t id) {
+  if (cap < 64 + strlen(name)) return 0;
+  size_t p = 2;
+  buf[p++] = id >> 8; buf[p++] = id & 0xFF;
+  buf[p++] = 0x01; buf[p++] = 0x00;           // flags: RD only (CD=0)
+  buf[p++] = 0; buf[p++] = 1;                 // QDCOUNT
+  buf[p++] = 0; buf[p++] = 0;                 // ANCOUNT
+  buf[p++] = 0; buf[p++] = 0;                 // NSCOUNT
+  buf[p++] = 0; buf[p++] = 1;                 // ARCOUNT (OPT)
+  const char* s = name;
+  while (*s) {
+    const char* dot = strchr(s, '.');
+    size_t len = dot ? (size_t)(dot - s) : strlen(s);
+    if (len == 0 || len > 63) return 0;
+    buf[p++] = (uint8_t)len; memcpy(buf + p, s, len); p += len;
+    s += len; if (*s == '.') s++;
   }
-  if (offset >= cap) return false;
-  out[offset++] = 0;
-  return true;
+  buf[p++] = 0;
+  buf[p++] = 0; buf[p++] = 1;                 // QTYPE A
+  buf[p++] = 0; buf[p++] = 1;                 // QCLASS IN
+  const uint8_t opt[] = {0x00, 0x00, 0x29, 0x04, 0xD0, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00}; // DO=1
+  memcpy(buf + p, opt, sizeof(opt)); p += sizeof(opt);
+  size_t msgLen = p - 2;
+  buf[0] = msgLen >> 8; buf[1] = msgLen & 0xFF;
+  return p;
 }
 
-size_t buildQuery(const char* name, uint8_t* out, size_t cap, uint16_t id) {
-  if (cap < 32) return 0;
-  memset(out, 0, cap);
-  size_t offset = 0;
-  put16(out, offset, id);
-  put16(out, offset, 0x0100); // RD=1, CD=0
-  put16(out, offset, 1);      // QDCOUNT
-  put16(out, offset, 0);      // ANCOUNT
-  put16(out, offset, 0);      // NSCOUNT
-  put16(out, offset, 0);      // ARCOUNT
-  if (!encodeName(name, out, offset, cap)) return 0;
-  put16(out, offset, 1); // QTYPE A
-  put16(out, offset, 1); // QCLASS IN
-  return offset;
-}
-
-bool readExact(WiFiClientSecure& client, uint8_t* out, size_t n, uint32_t timeoutMs = 6000) {
-  size_t got = 0;
-  uint32_t started = millis();
-  while (got < n && millis() - started < timeoutMs) {
-    int availableBytes = client.available();
-    if (availableBytes > 0) {
-      size_t want = min(n - got, static_cast<size_t>(availableBytes));
-      int justRead = client.read(out + got, want);
-      if (justRead > 0) got += static_cast<size_t>(justRead);
-    } else if (!client.connected()) {
-      return false;
-    } else {
-      delay(1);
-    }
+static bool readExact(uint8_t* dst, size_t n, uint32_t timeoutMs) {
+  size_t got = 0; uint32_t start = millis();
+  while (got < n && millis() - start < timeoutMs) {
+    if (!tls.connected() && !tls.available()) break;
+    int r = tls.read(dst + got, n - got);
+    if (r > 0) got += r; else delay(5);
   }
   return got == n;
 }
 
-bool runQuery(const char* domain) {
-  WiFiClientSecure client;
-  client.setCACert(ROOT_CA);
-  client.setCertificate(CLIENT_CERT);
-  client.setPrivateKey(CLIENT_KEY);
-  // TLS certificate validation remains enabled. Do not use setInsecure().
-  uint32_t start = micros();
-  if (!client.connect(GATEWAY_HOST, GATEWAY_PORT)) {
-    Serial.printf("[TLS] Connection/certificate verification failed for %s\n", domain);
-    client.stop();
-    return false;
-  }
+static const char* rcodeName(uint8_t rc) {
+  switch (rc) { case 0: return "NOERROR"; case 1: return "FORMERR"; case 2: return "SERVFAIL";
+                case 3: return "NXDOMAIN"; case 5: return "REFUSED"; default: return "OTHER"; }
+}
 
-  uint8_t query[512];
-  uint16_t id = nextDnsId++;
-  size_t queryLength = buildQuery(domain, query, sizeof(query), id);
-  if (queryLength == 0) {
-    Serial.println("[DNS] Could not encode query name");
-    client.stop();
-    return false;
-  }
+static void runQuery(const char* name) {
+  uint8_t q[300], resp[1300];
+  uint16_t id = (uint16_t)esp_random();
+  size_t qlen = buildQuery(name, q, sizeof(q), id);
+  if (!qlen) { Serial.printf("RESULT,%s,BUILD_ERROR\n", name); return; }
 
-  uint8_t prefix[2] = {
-    static_cast<uint8_t>((queryLength >> 8) & 0xff),
-    static_cast<uint8_t>(queryLength & 0xff)
-  };
-  if (client.write(prefix, 2) != 2 || client.write(query, queryLength) != queryLength) {
-    Serial.println("[TLS] Failed to write DNS query");
-    client.stop();
-    return false;
-  }
+  uint32_t t0 = micros();
+  if (tls.write(q, qlen) != qlen) { Serial.printf("RESULT,%s,SEND_ERROR\n", name); return; }
+  uint8_t lenb[2];
+  if (!readExact(lenb, 2, 5000)) { Serial.printf("RESULT,%s,TIMEOUT\n", name); return; }
+  size_t rlen = ((size_t)lenb[0] << 8) | lenb[1];
+  if (rlen < 12 || rlen > sizeof(resp)) { Serial.printf("RESULT,%s,BAD_LENGTH,%u\n", name, (unsigned)rlen); return; }
+  if (!readExact(resp, rlen, 5000)) { Serial.printf("RESULT,%s,SHORT_READ\n", name); return; }
+  uint32_t us = micros() - t0;
 
-  uint8_t replyPrefix[2];
-  if (!readExact(client, replyPrefix, 2)) {
-    Serial.println("[TLS] Timed out reading DNS response length");
-    client.stop();
-    return false;
-  }
-  size_t responseLength = get16(replyPrefix, 0);
-  if (responseLength < 12 || responseLength > 4096) {
-    Serial.printf("[DNS] Invalid response length: %u\n", static_cast<unsigned>(responseLength));
-    client.stop();
-    return false;
-  }
+  bool idOk = (((uint16_t)resp[0] << 8) | resp[1]) == id;
+  uint8_t rcode = resp[3] & 0x0F;
+  bool ad = resp[3] & 0x20;
+  Serial.printf("RESULT,%s,%s,rcode=%u,AD=%d,id_match=%d,latency_ms=%.2f,free_heap=%u\n",
+                name, rcodeName(rcode), rcode, ad, idOk, us / 1000.0, (unsigned)ESP.getFreeHeap());
+}
 
-  static uint8_t response[4096];
-  if (!readExact(client, response, responseLength)) {
-    Serial.println("[TLS] Timed out reading DNS response");
-    client.stop();
-    return false;
-  }
-  float latencyMs = (micros() - start) / 1000.0f;
-  uint16_t responseId = get16(response, 0);
-  uint16_t flags = get16(response, 2);
-  uint8_t rcode = flags & 0x0f;
-  bool ad = (flags & 0x0020) != 0;
-  if (responseId != id) {
-    Serial.println("[DNS] Response ID did not match query ID");
-    client.stop();
-    return false;
-  }
+static void runRound() {
+  Serial.printf("\n--- round start, free_heap=%u ---\n", (unsigned)ESP.getFreeHeap());
+  tls.setCACert(CA_CERT);
+  tls.setCertificate(CLIENT_CERT);
+  tls.setPrivateKey(CLIENT_KEY);
+  tls.setTimeout(10);
 
-  const char* status = "DNS_ERROR";
-  if ((rcode == 0 || rcode == 3) && ad) status = "SECURE";
-  else if ((rcode == 0 || rcode == 3) && !ad) status = "INSECURE_OR_UNAUTHENTICATED";
-  else if (rcode == 2) status = "SERVFAIL (expected for bogus test)";
-
-  Serial.printf("[DNS] %-28s status=%s rcode=%u AD=%u latency=%.2f ms\n",
-                domain, status, rcode, ad ? 1 : 0, latencyMs);
-  client.stop();
-  return true;
+  uint32_t t0 = millis();
+  if (!tls.connect(GATEWAY_HOST, GATEWAY_PORT)) {
+    char err[100] = {0};
+    int code = tls.lastError(err, sizeof(err));
+    Serial.printf("TLS_CONNECT_FAILED,code=%d,%s (no fallback attempted)\n", code, err);
+    return;
+  }
+  Serial.printf("TLS_HANDSHAKE_OK,handshake_ms=%lu,free_heap=%u\n",
+                (unsigned long)(millis() - t0), (unsigned)ESP.getFreeHeap());
+  for (size_t i = 0; i < NAME_COUNT; i++) runQuery(NAMES[i]);
+  tls.stop();
 }
 
 void setup() {
   Serial.begin(115200);
   delay(500);
-  Serial.println("\nAegisDNS ESP32 DoT demo");
+  Serial.println("AegisDNS ESP32 client starting");
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("Connecting to Wi-Fi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print('.');
-  }
-  Serial.printf("\nWi-Fi connected; ESP32 IP: %s\n", WiFi.localIP().toString().c_str());
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  uint32_t start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 30000) { delay(500); Serial.print('.'); }
+  if (WiFi.status() != WL_CONNECTED) { Serial.println("\nWi-Fi failed; restarting"); delay(2000); ESP.restart(); }
+  Serial.printf("\nWi-Fi OK, IP=%s\n", WiFi.localIP().toString().c_str());
+  if (!syncTime()) { Serial.println("NTP sync failed; restarting"); delay(2000); ESP.restart(); }
+  Serial.println("Time synced");
 }
 
 void loop() {
-  if (WiFi.status() != WL_CONNECTED) {
-    WiFi.reconnect();
-    delay(2000);
-    return;
-  }
-  for (size_t i = 0; i < DOMAIN_COUNT; ++i) {
-    runQuery(DOMAINS[i]);
-    delay(1200);
-  }
-  delay(3000);
+  runRound();
+  delay(ROUND_INTERVAL_S * 1000UL);
 }

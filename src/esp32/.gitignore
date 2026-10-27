@@ -1,0 +1,6 @@
+# Never commit credentials
+include/secrets.h
+include/certs.h
+certs/*
+!certs/.gitkeep
+.pio/

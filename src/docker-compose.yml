@@ -50,7 +50,8 @@ services:
 
   gateway:
     build:
-      context: ./gateway
+      context: ..
+      dockerfile: src/gateway/Dockerfile
     container_name: aegisdns-gateway
     restart: unless-stopped
     environment:

@@ -33,7 +33,6 @@ TLS_KEY = os.getenv("TLS_KEY", "certs/server.key")
 CLIENT_CA = os.getenv("CLIENT_CA", "certs/rootCA.crt")
 MAX_DNS_MESSAGE = 65535
 
-
 def error_response(
     query: dns.message.Message, rcode_value: int
 ) -> dns.message.Message:
@@ -96,10 +95,7 @@ async def publish_metrics(
 
 
 def cpu_percent() -> float:
-    try:
-        return float(psutil.Process().cpu_percent(interval=None))
-    except Exception:
-        return 0.0
+    return float(psutil.Process().cpu_percent(interval=None))
 
 
 async def process_query(
