@@ -1,0 +1,90 @@
+services:
+  certgen:
+    profiles: ["tools"]
+    build:
+      context: ./tools/certgen
+    container_name: aegisdns-certgen
+    environment:
+      GATEWAY_IP: ${GATEWAY_IP:-127.0.0.1}
+    volumes:
+      - ./pki:/out
+
+  authoritative:
+    build:
+      context: ./dns
+    container_name: aegisdns-authoritative
+    restart: unless-stopped
+    volumes:
+      - ./dns/generated:/var/lib/bind/generated
+    networks:
+      aegis_net:
+        ipv4_address: 172.28.0.10
+    expose:
+      - "53/udp"
+      - "53/tcp"
+    healthcheck:
+      test: ["CMD-SHELL", "rndc status >/dev/null 2>&1 || dig @127.0.0.1 aegis.test SOA +time=1 +tries=1 >/dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  resolver:
+    build:
+      context: ./resolver
+    container_name: aegisdns-resolver
+    restart: unless-stopped
+    volumes:
+      - ./dns/generated:/generated:ro
+    depends_on:
+      authoritative:
+        condition: service_started
+    networks:
+      aegis_net:
+        ipv4_address: 172.28.0.20
+    expose:
+      - "53/udp"
+      - "53/tcp"
+
+  gateway:
+    build:
+      context: ./gateway
+    container_name: aegisdns-gateway
+    restart: unless-stopped
+    environment:
+      RESOLVER_HOST: "172.28.0.20"
+      RESOLVER_PORT: "53"
+      METRICS_URL: "http://dashboard:3000/api/metrics"
+      TLS_CERT: "/app/certs/server.crt"
+      TLS_KEY: "/app/certs/server.key"
+      CLIENT_CA: "/app/certs/rootCA.crt"
+    volumes:
+      - ./pki/server.crt:/app/certs/server.crt:ro
+      - ./pki/server.key:/app/certs/server.key:ro
+      - ./pki/rootCA.crt:/app/certs/rootCA.crt:ro
+    depends_on:
+      - resolver
+      - dashboard
+    ports:
+      - "853:853/tcp"
+    networks:
+      aegis_net:
+        ipv4_address: 172.28.0.30
+
+  dashboard:
+    build:
+      context: ./dashboard
+    container_name: aegisdns-dashboard
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      aegis_net:
+        ipv4_address: 172.28.0.40
+
+networks:
+  aegis_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24

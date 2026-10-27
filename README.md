@@ -1,139 +1,448 @@
 # AegisDNS
 
-**Authenticated Gateway-Assisted DNSSEC for Resource-Constrained IoT**
+**Authenticated Gateway-Assisted DNSSEC for Resource-Constrained IoT**\
+AIORI-3 Hackathon · PS-004 · IoT and Cloud Computing
 
-AegisDNS is an AIORI-3 Hackathon project for **PS-004: Authenticated
-Gateway-Assisted DNSSEC for IoT**. It explores how an IoT device can use
-a trusted gateway to obtain DNS responses backed by real DNSSEC
-validation, without requiring the constrained device to implement the
-complete DNSSEC validation process itself.
+AegisDNS is a lab prototype that allows a resource-constrained IoT
+client to send DNS queries through an authenticated gateway. The gateway
+forwards queries to a trusted Unbound resolver that performs DNSSEC
+validation, applies an explicit policy to the result, and publishes
+telemetry to a live web dashboard.
 
-> **Project status:** Prototype under development. Features, tests,
-> benchmarks, and hardware compatibility must be marked as implemented
-> only after they have been run and verified. This README describes the
-> intended architecture and development plan; it does not claim that
-> unverified components are already complete.
+**Introductory video:** https://youtu.be/FeKZ9_0cWfo
 
-## Youtube Link of Introductory video:
-https://youtu.be/FeKZ9_0cWfo
+> **Project status (verified as of this README):** The local
+> Docker-based DNSSEC lab and gateway test script have been exercised on
+> Windows 11 with Docker Desktop. The controlled resolver outcomes
+> observed were `valid.aegis.test` → `NOERROR` with `AD=1`,
+> `bogus.aegis.test` → `SERVFAIL`, and `insecure.aegis.test` → `NOERROR`
+> without `AD`. The gateway test script also observed `SECURE`,
+> `BOGUS`/`SERVFAIL`, `INSECURE`, and `BLOCKED_CD` outcomes. ESP32
+> hardware integration and full baseline/performance benchmarking remain
+> pending. Features, tests, benchmarks, and hardware compatibility
+> should be marked complete only after they have been run and verified.
 
 ## Table of Contents
 
--   [Problem](#problem)
--   [Proposed Solution](#proposed-solution)
--   [Architecture](#architecture)
--   [Security Principles](#security-principles)
--   [Planned Features](#planned-features)
--   [Technology Stack](#technology-stack)
--   [Repository Structure](#repository-structure)
--   [Prerequisites](#prerequisites)
--   [Getting Started](#getting-started)
--   [Validation Policy](#validation-policy)
--   [Testing Plan](#testing-plan)
--   [Benchmarking](#benchmarking)
--   [Threat Model and Limitations](#threat-model-and-limitations)
--   [Development Roadmap](#development-roadmap)
--   [References](#references)
--   [Contributing](#contributing)
--   [Disclaimer](#disclaimer)
+1.  [Architecture](#1-architecture)
+2.  [Repository Layout](#2-repository-layout)
+3.  [Prerequisites](#3-prerequisites)
+4.  [Run Locally on Windows](#4-run-locally-on-windows)
+5.  [Verify DNSSEC Outcomes](#5-verify-dnssec-outcomes)
+6.  [Test the Gateway and Dashboard](#6-test-the-gateway-and-dashboard)
+7.  [ESP32 Integration and Teammate
+    Handoff](#7-esp32-integration-and-teammate-handoff)
+8.  [Git Collaboration Workflow](#8-git-collaboration-workflow)
+9.  [Security Principles, Threat Model, and
+    Limitations](#9-security-principles-threat-model-and-limitations)
+10. [Troubleshooting](#10-troubleshooting)
+11. [Progress and Development
+    Roadmap](#11-progress-and-development-roadmap)
+12. [References](#12-references)
 
-## Problem
-
-IoT devices often have limited processing power, memory, energy, and
-software resources. Implementing and maintaining a complete DNSSEC
-validation stack on every device can add complexity.
-
-Ordinary DNS resolution alone does not establish that DNS data has been
-authenticated. An attacker who can influence an unprotected resolution
-path may attempt to provide forged or manipulated DNS answers.
-
-A gateway-assisted design moves DNSSEC validation to a trusted gateway
-while securing the connection between the IoT client and that gateway.
-This reduces the validation burden on the client, but it also introduces
-a trust boundary: the client must authenticate the gateway and
-understand that DNSSEC validation is being performed by the gateway's
-trusted resolver.
-
-## Proposed Solution
-
-AegisDNS is designed around the following flow:
-
-1.  An IoT client connects to an authorized gateway over an
-    authenticated, encrypted channel.
-2.  The client submits a DNS query using the project's defined request
-    protocol.
-3.  The gateway validates the request and forwards the query to a
-    configured DNSSEC-validating resolver.
-4.  The resolver performs DNSSEC validation.
-5.  The gateway determines the validation outcome and applies an
-    explicit policy.
-6.  The gateway returns the answer, validation status, and policy
-    decision over the protected channel.
-7.  The client accepts or rejects the result according to the documented
-    protocol and policy.
-
-The initial development path uses a Python client simulator to validate
-the complete flow before adding ESP32 hardware integration.
-
-## Architecture
+## 1. Architecture
 
 ``` text
-+-----------------------+
-| IoT Client            |
-| Python simulator      |
-| ESP32 client (target) |
-+-----------+-----------+
-            |
-            | Mutual TLS (mTLS)
-            | Authenticated + encrypted
-            v
-+-----------------------+
-| AegisDNS Gateway      |
-|                       |
-| 1. Authenticate       |
-| 2. Validate request   |
-| 3. Query resolver     |
-| 4. Apply policy       |
-| 5. Return status      |
-+-----------+-----------+
-            |
-            | DNS query to trusted resolver
-            v
-+-----------------------+
-| Unbound Resolver      |
-| DNSSEC validation     |
-+-----------+-----------+
-            |
-            v
-       DNS hierarchy
+ESP32 client (target)
+Wi-Fi + mutual TLS / DNS-over-TLS (TCP 853)
+                    |
+                    v
+         Python asyncio DoT gateway
+         - validates client TLS certificate
+         - rejects client queries with CD=1
+         - forwards DNS queries to Unbound
+         - applies SECURE / INSECURE / BOGUS / ERROR policy
+         - emits latency and CPU telemetry
+                    |
+                    v
+          Unbound validating resolver
+          - local trust anchor for aegis.test
+          - DNSSEC validation
+                    |
+                    v
+          BIND9 authoritative test zones
+          - valid.aegis.test
+          - bogus.aegis.test
+          - insecure.aegis.test (unsigned child)
+
+Python gateway -- HTTP POST /api/metrics --> Express + Socket.io
+                                               |
+                                               v
+                                          Live dashboard
+                                          http://localhost:3000
 ```
 
-**Important trust boundary:** DNSSEC validation takes place at the
-configured validating resolver. The client authenticates the gateway and
-trusts its reported validation result over the authenticated channel.
-Unless independent validation is implemented on the device, AegisDNS
-does **not** claim end-to-end DNSSEC validation by the IoT client.
+### Request flow
 
-## Security Principles
+1.  The IoT client connects to the gateway over an authenticated,
+    encrypted channel.
+2.  The client submits a DNS query.
+3.  The gateway authenticates the client and forwards the query to its
+    configured resolver.
+4.  Unbound performs DNSSEC validation.
+5.  The gateway interprets the trusted resolver's result and applies its
+    policy.
+6.  The response and corresponding telemetry are returned or published
+    as configured.
+7.  The client should accept or reject the result according to the
+    documented protocol and policy.
 
-AegisDNS keeps three distinct security functions separate:
+The current local test path exercises the Docker-based resolver and
+gateway using `scripts/test_gateway.py`. ESP32 is the target hardware
+client; its real hardware integration is not yet verified.
+
+### Important trust boundary
+
+TLS/mTLS authenticates endpoints and protects the client-to-gateway
+channel. DNSSEC validates DNS data. A successful TLS connection alone
+does **not** prove that a DNS answer passed DNSSEC validation. In this
+lab, the gateway trusts the `AD` flag only from its configured,
+controlled Unbound resolver. Unless independent DNSSEC validation is
+implemented on the device, AegisDNS does **not** claim end-to-end DNSSEC
+validation by the IoT client.
+
+## 2. Repository Layout
+
+``` text
+AegisDNS/
+├── docker-compose.yml
+├── .env.example
+├── .gitignore
+├── README.md
+├── README_SHORT.txt
+├── dns/
+│   ├── Dockerfile
+│   ├── named.conf
+│   ├── scripts/setup-zone.sh
+│   └── zone/
+│       ├── aegis.test.zone
+│       └── insecure.aegis.test.zone
+├── resolver/
+│   ├── Dockerfile
+│   ├── start-unbound.sh
+│   └── unbound.conf
+├── gateway/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── gateway.py
+├── dashboard/
+│   ├── Dockerfile
+│   ├── package.json
+│   ├── server.js
+│   └── public/index.html
+├── scripts/test_gateway.py
+├── tools/certgen/
+│   ├── Dockerfile
+│   └── generate-certs.sh
+└── esp32/
+    ├── src/main.cpp
+    └── certs/                 # local device certificate files; ignored by Git
+```
+
+Generated DNSSEC material is written beneath `dns/generated/`; local
+TLS/PKI files are under `pki/`. These generated and private files must
+not be committed. The layout above describes the current project
+structure; update it if repository files change.
+
+## 3. Prerequisites
+
+### For the local services
+
+-   Windows 11; the commands below use PowerShell.
+-   Docker Desktop running with the Linux/WSL 2 engine.
+-   Git.
+-   Python 3 for the host-side smoke-test script (`py` command on
+    Windows).
+
+### For firmware work
+
+-   Arduino IDE or another supported Arduino-ESP32 build environment.
+-   ESP32 board and a **USB data cable**.
+-   Wi-Fi network accessible to the gateway host.
+
+BIND9, Unbound, Node.js, and the gateway's Python dependencies run in
+containers; they do not need to be installed directly on Windows for the
+documented Docker workflow. Python is required on the host to run
+`scripts/test_gateway.py` as currently provided.
+
+The initial verified local environment is Windows 11 with Docker
+Desktop. Other operating systems and ESP32 board/framework combinations
+should be tested rather than assumed compatible.
+
+## 4. Run Locally on Windows
+
+Open PowerShell in the repository directory. Examples assume
+`D:\AegisDNS`; adjust the path if you cloned the repository elsewhere.
+
+### 4.1 Configure the environment
+
+``` powershell
+cd D:\AegisDNS
+Copy-Item .env.example .env
+```
+
+If `.env` already exists, **do not overwrite it**. Review `.env.example`
+for supported settings. Keep `.env` local; it is ignored by Git.
+
+### 4.2 Generate local development certificates
+
+``` powershell
+docker compose --profile tools run --rm certgen
+```
+
+This generates local TLS and client credentials beneath `pki/`. The CA
+private key and client/server private keys are secrets; do not commit
+them or send them through GitHub. Regenerate certificates if the
+configured gateway hostname/address or certificate settings change.
+
+### 4.3 Build and start the stack
+
+``` powershell
+docker compose up --build -d
+docker compose ps
+```
+
+Expected services are `authoritative`, `resolver`, `gateway`, and
+`dashboard`. Check startup logs if a service is restarting:
+
+``` powershell
+docker compose logs --tail 100 authoritative
+docker compose logs --tail 100 resolver
+docker compose logs --tail 100 gateway
+docker compose logs --tail 100 dashboard
+```
+
+-   Dashboard: http://localhost:3000
+-   Gateway: TCP port `853` on the Docker host.
+-   The current Compose configuration binds the dashboard to
+    `127.0.0.1:3000` for local access.
+
+Do not expose the resolver or authoritative DNS service publicly.
+
+## 5. Verify DNSSEC Outcomes
+
+Run these commands from PowerShell. The quotes around `@127.0.0.1` are
+important because `@` has special syntax in PowerShell.
+
+``` powershell
+docker compose exec resolver dig '@127.0.0.1' valid.aegis.test A +dnssec
+docker compose exec resolver dig '@127.0.0.1' bogus.aegis.test A +dnssec
+docker compose exec resolver dig '@127.0.0.1' insecure.aegis.test A +dnssec
+```
+
+### Expected controlled-lab results
+
+  -------------------------------------------------------------------------------
+  Name                    Expected DNS      AD bit            Interpretation
+                          result                              
+  ----------------------- ----------------- ----------------- -------------------
+  `valid.aegis.test`      `NOERROR`         Present (`AD=1`)  Signature validated
+
+  `bogus.aegis.test`      `SERVFAIL`        Absent            DNSSEC validation
+                                                              failed; the lab
+                                                              deliberately uses a
+                                                              broken RRSIG
+
+  `insecure.aegis.test`   `NOERROR`         Absent (`AD=0`)   Unsigned/insecure
+                                                              child delegation;
+                                                              not equivalent to
+                                                              bogus
+  -------------------------------------------------------------------------------
+
+These outcomes have been observed in the local lab. A `SERVFAIL` is
+**not universally proof** of a DNSSEC validation failure: real resolver
+deployments may also return it for timeouts, network errors, or
+configuration problems. The deliberately broken-signature test zone is
+used to demonstrate the bogus path.
+
+## 6. Test the Gateway and Dashboard
+
+Keep the Docker stack running and execute:
+
+``` powershell
+py scripts/test_gateway.py
+```
+
+The script queries the three controlled domains and sends a query with
+`CD=1`. The observed intended outcomes are:
+
+``` text
+valid.aegis.test      SECURE      rcode=0 AD=1
+bogus.aegis.test      SERVFAIL    rcode=2 AD=0
+insecure.aegis.test   INSECURE    rcode=0 AD=0
+CD=1 test             REFUSED     rcode=5 AD=0
+```
+
+Exact spacing and latency vary. Keep http://localhost:3000 open.
+Accepted metrics are sent to Express at `POST /api/metrics` and
+broadcast to browsers through Socket.io as the `dns_metric` event.
+
+Useful checks:
+
+``` powershell
+docker compose ps
+docker compose logs --tail 60 gateway
+docker compose logs --tail 60 dashboard
+```
+
+If only the dashboard is being changed, rebuild that service:
+
+``` powershell
+docker compose up -d --build --force-recreate dashboard
+```
+
+Then hard-refresh the browser with **Ctrl+F5**.
+
+### Reporting test results
+
+When documenting new tests, include the command executed,
+software/environment versions, expected and observed outcomes, pass/fail
+counts, and known gaps. Do not describe an unexecuted test as passed.
+Keep resolver validation outcomes separate from gateway policy
+decisions.
+
+## 7. ESP32 Integration and Teammate Handoff
+
+The current firmware source is `esp32/src/main.cpp`. It uses
+`WiFiClientSecure`, implements DNS-over-TLS framing with a 2-byte
+message-length prefix, sends DNS A queries, and prints response status
+and query latency over Serial. **Physical ESP32 integration is pending
+and must not be described as verified until tested on the target
+board.**
+
+### Firmware checklist
+
+1.  Install Arduino IDE and the `esp32` board package by Espressif
+    Systems.
+2.  Open `esp32/src/main.cpp` in an Arduino-ESP32 project and select the
+    correct board and serial port when hardware is available.
+3.  Set the Wi-Fi SSID and password locally.
+4.  Use a **device-specific client certificate and private key** issued
+    by the CA trusted by the gateway. The gateway requires mutual TLS.
+5.  Configure the public CA certificate used to validate the gateway
+    certificate, and verify the gateway hostname against a matching
+    certificate Subject Alternative Name (SAN).
+6.  Set the gateway endpoint to the laptop/server LAN IP and a hostname
+    covered by the gateway certificate. `localhost` on the ESP32 refers
+    to the ESP32 itself, not the laptop.
+7.  Ensure the ESP32 and gateway host can reach each other (same LAN for
+    the initial test), TCP 853 is allowed by the host firewall, and the
+    gateway is running.
+8.  Query `valid.aegis.test`, `bogus.aegis.test`, and
+    `insecure.aegis.test`; compare serial output with dashboard events.
+9.  Record board model, framework/library versions, connection result,
+    observed responses, and any memory or timing measurements.
+
+### Credentials and collaboration warning
+
+Do **not** commit real certificate private keys, Wi-Fi passwords, or
+populated PEM secrets in tracked firmware source. The starter `main.cpp`
+contains placeholder PEM blocks; use local, ignored credentials or
+refactor them into a local ignored secrets header before inserting real
+credentials.
+
+Never send the CA private key (`rootCA.key`) to a teammate or put it on
+GitHub. To test against another person's gateway, the device needs its
+own client certificate signed by the CA that gateway trusts. Exchange
+device credentials securely, or have each teammate test against their
+own local stack/CA first.
+
+### Hostname and IP details
+
+The server certificate's DNS/IP SAN must match the hostname or IP used
+by the ESP32. A certificate for `aegisdns.local` will not automatically
+validate if the device connects using a different name or an IP absent
+from the certificate SAN. Check the generated certificate and configure
+device hostname resolution accordingly. **Do not disable certificate
+verification** to work around name mismatches.
+
+## 8. Git Collaboration Workflow
+
+Use a separate branch per task. Avoid committing directly to `main` for
+ongoing feature work.
+
+### First publish (repository owner)
+
+Create an **empty** GitHub repository; do not generate an additional
+GitHub README or `.gitignore` because these already exist locally. From
+the project folder:
+
+``` powershell
+git status
+git remote add origin https://github.com/<OWNER>/AegisDNS.git
+git push -u origin main
+```
+
+Replace `<OWNER>` with the GitHub account or organization. If `origin`
+already exists, inspect `git remote -v` rather than adding it again.
+Keep the repository private until secrets and publication choices have
+been reviewed.
+
+Invite teammates from GitHub repository **Settings → Collaborators**.
+They must accept the invitation.
+
+### Teammate: clone and create a branch
+
+``` powershell
+git clone https://github.com/<OWNER>/AegisDNS.git
+cd AegisDNS
+git switch -c feature/esp32-integration
+Copy-Item .env.example .env
+docker compose --profile tools run --rm certgen
+docker compose up --build -d
+```
+
+If a teammate is working on firmware without access to the ESP32 yet,
+they can edit and compile-check the source when their toolchain is
+available. Physical connectivity and TLS validation require hardware and
+authorized credentials.
+
+### Each contributor: commit and push a branch
+
+``` powershell
+git status
+git add esp32/src/main.cpp
+git commit -m "feat(esp32): improve gateway client"
+git push -u origin feature/esp32-integration
+```
+
+Stage only the files relevant to your change. Open a pull request to
+merge the feature branch into `main`. For dashboard work, use a separate
+branch such as `feature/dashboard-ui` and stage the relevant
+`dashboard/` files.
+
+Before every push, check for accidentally staged secrets:
+
+``` powershell
+git status --short
+git diff --cached --name-only
+```
+
+Repository privacy is not a substitute for keeping private credentials
+out of Git.
+
+## 9. Security Principles, Threat Model, and Limitations
+
+### Security principles
+
+AegisDNS keeps three security functions distinct:
 
 -   **DNSSEC:** Authenticates DNS data and protects its integrity
     through the DNSSEC chain of trust. DNSSEC does not encrypt DNS
     queries.
--   **TLS/mTLS:** Protects the client--gateway channel and authenticates
-    the communicating endpoints according to the configured certificate
-    trust policy.
+-   **TLS/mTLS:** Protects the client-to-gateway channel and
+    authenticates communicating endpoints according to the configured
+    certificate trust policy.
 -   **Gateway policy enforcement:** Decides whether a response may be
-    returned based on the actual validation outcome and the project's
+    returned based on the trusted resolver's validation outcome and the
     configured policy.
 
 The gateway must not trust a client-supplied claim that a result is
 secure. A successful DNS lookup must not be treated as proof of DNSSEC
-validation. The DNSSEC validation result and the policy decision must be
+validation. Validation status and the policy decision must be
 represented separately.
 
-### Validation outcomes
+### Validation outcomes and intended handling
 
   -----------------------------------------------------------------------
   Outcome                 Meaning                 Intended handling
@@ -141,11 +450,10 @@ represented separately.
   `SECURE`                DNSSEC validation       Permit according to
                           succeeded               policy
 
-  `INSECURE`              The answer is not       Apply an explicit
-                          authenticated by        configurable policy
-                          DNSSEC; this is not     
-                          automatically proof of  
-                          an attack               
+  `INSECURE`              DNS data is not         Apply an explicit,
+                          authenticated by        documented policy
+                          DNSSEC; this alone does 
+                          not prove an attack     
 
   `BOGUS`                 DNSSEC validation       Reject the response
                           failed                  
@@ -154,346 +462,165 @@ represented separately.
                           outcome could not be    
                           established             
 
-  Resolver error /        The resolver could not  Return an explicit
+  Resolver error /        Resolver could not      Return an explicit
   timeout                 provide a reliable      error; never report it
                           result                  as secure
   -----------------------------------------------------------------------
 
 The exact mapping from resolver responses to these outcomes must be
-implemented and tested against the selected Unbound version and
-configuration.
-
-## Planned Features
-
--   Authenticated, encrypted client--gateway communication using mutual
-    TLS.
--   A gateway service with separate transport, resolver, policy, and
-    response-handling modules.
--   Real DNSSEC validation through Unbound.
--   Controlled test cases for valid signed, bogus, and insecure zones.
--   Explicit rejection of bogus DNSSEC responses.
--   Authentication-failure and resolver-failure handling.
--   Python client simulator.
--   ESP32 integration, subject to board, framework, and TLS-library
-    compatibility.
--   Automated unit and integration tests.
--   Benchmarks for latency, throughput, CPU, memory, and rejection
-    behavior.
--   Optional lightweight dashboard for query outcomes and gateway
-    health.
-
-These are project goals, not claims that every feature is already
-implemented.
-
-## Technology Stack
-
-  -----------------------------------------------------------------------
-  Component               Planned technology      Purpose
-  ----------------------- ----------------------- -----------------------
-  IoT client              Python simulator; ESP32 Submit queries and
-                          client target           process responses
-
-  Gateway API             Python, FastAPI         Request handling and
-                                                  policy enforcement
-
-  DNS resolver            Unbound                 DNSSEC-validating
-                                                  resolution
-
-  Secure transport        TLS with mutual         Authenticate endpoints
-                          authentication          and protect the channel
-
-  Certificates            OpenSSL or equivalent   Development CA and
-                          tooling                 endpoint certificates
-
-  Tests                   pytest and integration  Verify expected
-                          scripts                 behavior
-
-  Benchmarks              Python, CSV/JSON output Measure performance
-                                                  reproducibly
-
-  Version control         Git                     Track source and
-                                                  configuration
-  -----------------------------------------------------------------------
-
-Versions should be pinned in the dependency files and recorded in test
-reports once the implementation environment is established.
-
-## Repository Structure
-
-The following is a suggested structure. Update it to match the files
-that actually exist in the repository.
-
-``` text
-AegisDNS/
-├── README.md
-├── requirements.txt
-├── .env.example
-├── .gitignore
-├── config/
-├── gateway/
-│   ├── app.py
-│   ├── config.py
-│   ├── dnssec_resolver.py
-│   ├── policy.py
-│   ├── security.py
-│   └── schemas.py
-├── client/
-│   ├── simulator/
-│   └── esp32/
-├── resolver/
-│   └── test-zones/
-├── certificates/
-│   └── README.md
-├── tests/
-│   ├── unit/
-│   └── integration/
-├── benchmarks/
-├── scripts/
-├── dashboard/
-└── docs/
-    ├── requirements.md
-    ├── threat-model.md
-    ├── architecture.md
-    ├── dnssec-validation.md
-    ├── gateway.md
-    ├── transport-security.md
-    ├── iot-client.md
-    ├── end-to-end-demo.md
-    ├── testing.md
-    └── benchmarking.md
-```
-
-## Prerequisites
-
-The planned development environment is a Linux system such as Ubuntu or
-Debian. A Linux virtual machine or WSL2 may be used on Windows if the
-required networking and resolver behavior is supported.
-
-Expected tools include:
-
--   Python 3 and `venv`
--   `pip`
--   Unbound
--   OpenSSL
--   `dig` or equivalent DNS inspection tools
--   Git
--   pytest
--   ESP32 toolchain and supported TLS libraries for hardware integration
-
-Exact package names and supported versions should be confirmed for the
-target operating system.
-
-## Getting Started
-
-Because implementation and configuration may change during development,
-use the following as the intended setup sequence. Run commands only
-after the corresponding files and configuration have been added to the
-repository.
-
-### 1. Clone the repository
-
-``` bash
-git clone https://github.com/vardan-18/A3-PS004-TC399.git
-cd A3-PS004-TC399
-```
-
-### 2. Create a Python environment
-
-``` bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-```
-
-On Windows PowerShell, activate the environment with:
-
-``` powershell
-.venv\Scripts\Activate.ps1
-```
-
-### 3. Install Python dependencies
-
-Once `requirements.txt` is available:
-
-``` bash
-pip install -r requirements.txt
-```
-
-### 4. Configure the resolver and certificates
-
--   Configure Unbound to perform DNSSEC validation.
--   Configure the gateway to use the intended resolver endpoint.
--   Create a development certificate authority and issue the gateway and
-    client certificates.
--   Configure both endpoints to trust the correct CA.
--   Keep private keys and secrets outside version control.
-
-Follow the detailed instructions in `docs/dnssec-validation.md` and
-`docs/transport-security.md` once those files have been implemented.
-
-### 5. Start and verify each component
-
-The intended startup order is:
-
-1.  Start and verify the resolver.
-2.  Start the gateway with TLS/mTLS enabled.
-3.  Run the Python client simulator with a trusted client certificate.
-4.  Execute the DNSSEC and authentication integration tests.
-5.  Connect the ESP32 client after the simulator-based flow works.
-
-**Do not assume that a command or endpoint exists until it has been
-implemented and documented.** The final repository should replace these
-general steps with exact tested commands.
-
-## Validation Policy
-
-The gateway must distinguish DNSSEC validation status from its policy
-decision. A suggested default policy is:
-
--   `SECURE`: allow the validated response.
--   `BOGUS`: reject.
--   `INDETERMINATE`: reject or return an explicit validation error.
--   Resolver unavailable or timeout: return an explicit error; never
-    mark the response secure.
--   `INSECURE`: apply a clearly documented policy. For a strict
-    demonstration, configure the gateway to reject insecure results; if
-    insecure results are allowed, label them accurately and record that
-    decision.
-
-The policy must be configurable and tested. The gateway must obtain
-validation status from its trusted resolver path, not from
-client-provided metadata. Any use of DNS flags such as the AD bit
-requires an explicit trust arrangement and verification of the resolver
-behavior.
-
-## Testing Plan
-
-The test suite should cover at least:
-
-  -----------------------------------------------------------------------
-  Scenario                            Expected result
-  ----------------------------------- -----------------------------------
-  Valid signed DNSSEC zone            Report `SECURE`; return only if
-                                      policy permits
-
-  Bogus DNSSEC zone                   Report `BOGUS`; reject
-
-  Insecure zone                       Report `INSECURE`; apply configured
-                                      policy
-
-  Indeterminate validation            Explicit error or rejection
-
-  Trusted client certificate          Accept connection
-
-  Untrusted client certificate        Reject connection
-
-  Untrusted gateway certificate       Client refuses connection
-
-  Resolver unavailable                Explicit failure; no false secure
-                                      result
-
-  DNS timeout                         Explicit timeout handling
-
-  Malformed request                   Reject safely
-
-  Unsupported record type             Return a documented error
-
-  Repeated queries                    Remain stable within configured
-                                      limits
-  -----------------------------------------------------------------------
-
-Unit tests may use mocks to test isolated modules. Integration tests
-must separately exercise the real validating resolver and secure
-transport.
-
-When reporting test results, include the command executed, software
-environment, pass/fail counts, and any known gaps. Do not label
-unexecuted tests as passed.
-
-## Benchmarking
-
-The benchmark suite should compare clearly defined configurations, such
-as:
-
-1.  **Baseline:** DNS lookup through the selected resolver without the
-    AegisDNS gateway application layer.
-2.  **Gateway path:** DNS lookup through the authenticated gateway and
-    DNSSEC-validation path.
-3.  **Negative cases:** Bogus DNSSEC results and unauthenticated
-    connection attempts.
-
-Measure, where applicable:
-
--   Median, p95, and p99 latency
--   Throughput
--   Success and rejection rates
--   Gateway CPU and memory use
--   Resolver response time
--   TLS/mTLS overhead
--   Behavior under controlled concurrency
-
-Record the hardware, software versions, cache state, query mix,
-concurrency, test duration, and sample count. Separate cold-cache and
-warm-cache tests when practical.
-
-**No benchmark numbers should be reported until they have been
-measured.** Results should be saved in CSV or JSON and generated charts
-should be derived from those files.
-
-## Threat Model and Limitations
-
-### Threats addressed by the design
+tested against the selected Unbound version and configuration. The
+current lab demonstrates secure, bogus, insecure, and `CD=1` rejection
+paths. Additional error classification and failure-path coverage remain
+development work.
+
+### Threats the design aims to address
 
 -   Forged DNS data that fails DNSSEC validation.
 -   Unauthorized clients attempting to access the gateway.
--   Impersonation of the gateway when certificate validation is
-    correctly configured.
+-   Gateway impersonation when certificate validation is correctly
+    configured.
 -   Accidental acceptance of bogus, indeterminate, or failed resolver
     outcomes.
 -   Malformed requests and basic resource-abuse scenarios, subject to
     implemented limits.
 
-### Important limitations
+### Limitations and safeguards
 
--   The gateway becomes a trusted security component and a potential
-    single point of failure.
--   A compromised gateway can lie about validation status or return
-    manipulated data.
--   DNSSEC does not provide confidentiality for DNS queries.
--   mTLS secures the client--gateway channel but does not, by itself,
-    prove that the DNS answer is authentic.
+-   This is a hackathon/lab prototype, not hardened production DNS
+    infrastructure or a production security certification.
+-   The gateway is a trusted security component and a potential single
+    point of failure. A compromised gateway could misreport validation
+    status or return manipulated data.
+-   mTLS secures the client-to-gateway channel but does not, by itself,
+    prove that a DNS answer is authentic.
+-   The dashboard metrics endpoint is currently unauthenticated. Keep it
+    on a trusted private network until gateway-to-dashboard
+    authentication and access controls are added.
+-   Trust the `AD` bit only from the resolver that the gateway controls
+    and protects; do not accept an arbitrary client-supplied `AD` bit as
+    proof.
+-   Distinguish DNSSEC-bogus outcomes from transport failures, timeouts,
+    indeterminate results, and resolver configuration errors before
+    production use.
+-   Define an explicit policy for insecure results. This demo reports
+    them separately; a deployment may reject or return flagged results
+    depending on its requirements.
+-   Do not expose recursive DNS services (Unbound) or the authoritative
+    lab server directly to the public Internet.
+-   Dashboard statistics are in-memory session data and reset on
+    refresh; they are not a durable benchmark store.
+-   ESP32 compatibility depends on the board, framework, certificate
+    handling, memory limits, and TLS libraries. Simulator/laptop
+    performance may not represent constrained-hardware performance.
 -   Availability depends on the gateway, resolver, network, and power
     supply.
--   ESP32 compatibility depends on the specific board, framework,
-    certificate handling, memory limits, and TLS libraries.
--   Performance on a laptop or simulator may not represent performance
-    on constrained hardware.
--   This is a hackathon prototype, not a production security
-    certification.
 
-A future version could investigate gateway redundancy, key rotation,
-hardened deployment, rate limiting, monitoring, and independent
-validation strategies.
+Future hardening could include gateway redundancy, key rotation, rate
+limiting, persistent monitoring, gateway-to-dashboard authentication,
+and independent validation strategies.
 
-## Development Roadmap
+## 10. Troubleshooting
 
--   [ ] Define requirements and threat model.
--   [ ] Establish the Linux development environment.
--   [ ] Configure Unbound and prove DNSSEC validation using controlled
-    test zones.
--   [ ] Implement the gateway's resolver and policy modules.
--   [ ] Configure and verify mutual TLS.
--   [ ] Build the Python client simulator.
--   [ ] Demonstrate valid, bogus, insecure, and failure cases.
--   [ ] Add automated unit and integration tests.
--   [ ] Implement ESP32 integration.
--   [ ] Run reproducible performance benchmarks.
--   [ ] Add an optional dashboard.
--   [ ] Finalize setup instructions and demo evidence.
+**Docker command not found**\
+Start Docker Desktop, open a new terminal, and check `docker --version`
+and `docker info`.
 
-Update this checklist as work is completed and verified.
+**Authoritative container restarts or zone does not load**\
+Inspect `docker compose logs --tail 100 authoritative`. The signed test
+zone must load without syntax errors.
 
-## References
+**PowerShell errors on `@127.0.0.1`**\
+Quote the argument: `dig '@127.0.0.1' ...`.
+
+**Valid name returns `NXDOMAIN` from Unbound**\
+Check `resolver/unbound.conf`, especially the
+`local-zone: "test." transparent` setting and the `stub-zone` for
+`aegis.test.`. Validate the configuration with:
+
+``` powershell
+docker compose exec resolver unbound-checkconf /etc/unbound/unbound.conf
+```
+
+Then inspect resolver logs.
+
+**Gateway returns `SERVFAIL` for every name**\
+Inspect `docker compose logs --tail 100 gateway`. Confirm resolver
+host/port environment settings and ensure code changes were rebuilt:
+
+``` powershell
+docker compose up -d --build --force-recreate gateway
+```
+
+**No events appear on the dashboard**\
+Keep the gateway and dashboard running, execute
+`py scripts/test_gateway.py`, and inspect both service logs. Confirm
+that the gateway's metrics URL uses the Compose service name for the
+dashboard when called from inside Docker.
+
+**ESP32 TLS connection fails**\
+Check Wi-Fi reachability, host firewall TCP 853, client certificate
+trust, gateway certificate SAN/hostname match, and that the
+certificate/private-key pair is correct. Do not disable certificate
+verification.
+
+## 11. Progress and Development Roadmap
+
+The checklist below distinguishes verified local work from pending work.
+Update it only when a task has actually been completed and verified.
+
+### Verified in the current local lab
+
+-   [x] Docker-based local DNSSEC lab runs on Windows 11 with Docker
+    Desktop.
+-   [x] Controlled resolver outcomes observed for valid, bogus, and
+    insecure test domains.
+-   [x] Gateway test script observed `SECURE`, `BOGUS`/`SERVFAIL`,
+    `INSECURE`, and `BLOCKED_CD` outcomes.
+-   [x] Gateway telemetry can be sent to the dashboard during the local
+    test flow.
+
+### Pending milestones
+
+-   [ ] Verify ESP32 compilation and connection to the gateway using
+    real mutual TLS.
+-   [ ] Confirm hostname verification and a no-plaintext-fallback
+    failure path on hardware.
+-   [ ] Confirm ESP32 test requests appear on the live dashboard.
+-   [ ] Persist structured events to JSONL/CSV for repeatable
+    evaluation.
+-   [ ] Improve classification of resolver errors versus DNSSEC-bogus
+    outcomes.
+-   [ ] Add automated unit and integration tests for authentication,
+    malformed requests, resolver failures, timeouts, and validation
+    outcomes.
+-   [ ] Add authentication/access controls to the telemetry endpoint
+    before any broader deployment.
+-   [ ] Implement a baseline-versus-AegisDNS benchmark runner.
+-   [ ] Measure median and p95 latency, throughput, success/rejection
+    rates, gateway CPU/RSS memory, resolver response time, TLS/mTLS
+    overhead, and ESP32 free heap/handshake timing where applicable.
+-   [ ] Record hardware, software versions, cache state, query mix,
+    concurrency, duration, and sample count; separate cold-cache and
+    warm-cache runs where practical.
+-   [ ] Finalize setup instructions and retain demo/test evidence.
+
+### Benchmarking guidelines
+
+Compare clearly defined configurations:
+
+1.  **Baseline:** DNS lookup through the selected resolver without the
+    AegisDNS gateway application layer.
+2.  **Gateway path:** DNS lookup through the authenticated gateway and
+    DNSSEC-validation path.
+3.  **Negative cases:** Bogus DNSSEC responses and unauthenticated
+    connection attempts.
+
+Report measured values only. Save raw results as CSV or JSON and
+generate charts from those files. Include the test environment and
+methodology so results can be reproduced. The full baseline/performance
+benchmark and ESP32 resource measurements are currently pending.
+
+## 12. References
 
 -   [RFC 4033 --- DNS Security Introduction and
     Requirements](https://www.rfc-editor.org/rfc/rfc4033)
@@ -510,25 +637,21 @@ Update this checklist as work is completed and verified.
 -   [Python Documentation](https://docs.python.org/3/)
 
 Consult the relevant RFCs and official documentation when implementing
-protocol behavior. Do not claim a reference supports a feature without
-verifying the relevant section.
+protocol behavior. Do not claim that a reference supports a feature
+without verifying the relevant section.
 
-## Contributing
+------------------------------------------------------------------------
 
-Contributions should prioritize correctness, reproducibility, and
-security.
+**Contributing guidelines:** Keep changes focused and documented, add
+tests for new behavior, never commit private keys or credentials, record
+actual test and benchmark results, clearly identify incomplete or
+simulated functionality, and document changes to the threat model or
+validation policy.
 
-1.  Keep changes focused and documented.
-2.  Add tests for new behavior.
-3.  Never commit private keys, credentials, or secrets.
-4.  Record actual test and benchmark results.
-5.  Clearly identify incomplete or simulated functionality.
-6.  Explain changes to the threat model or validation policy.
+**Disclaimer:** AegisDNS is an educational hackathon prototype. Do not
+deploy it to protect critical infrastructure without a full security
+review, appropriate operational controls, and validation in the intended
+environment.
 
-## Disclaimer
-
-AegisDNS is an educational and hackathon prototype under development. It
-is not a substitute for a professionally reviewed production DNS
-security architecture. Do not deploy it to protect critical
-infrastructure without a full security review, appropriate operational
-controls, and validation under the intended environment.
+**Keep secrets local. Commit source code and documentation; never commit
+live credentials.**
