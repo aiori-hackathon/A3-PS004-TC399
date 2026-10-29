@@ -1,0 +1,17 @@
+Query latency statistics
+Source: src/esp32/output.txt
+Samples: 126 total (42 per domain)
+Units: milliseconds
+P95 method: nearest rank
+
+Aggregate:
+Mean: 29.28 ms
+Median: 18.97 ms
+Minimum: 12.99 ms
+Maximum: 228.53 ms
+P95: 52.99 ms
+
+Per domain (mean / median / p95):
+valid.aegis.test: 29.66 / 19.38 / 48.80 ms
+bogus.aegis.test: 29.83 / 18.54 / 53.40 ms
+insecure.aegis.test: 28.34 / 18.93 / 52.99 ms

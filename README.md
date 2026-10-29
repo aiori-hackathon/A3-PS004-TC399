@@ -17,10 +17,14 @@ telemetry to a live web dashboard.
 > observed were `valid.aegis.test` → `NOERROR` with `AD=1`,
 > `bogus.aegis.test` → `SERVFAIL`, and `insecure.aegis.test` → `NOERROR`
 > without `AD`. The gateway test script also observed `SECURE`,
-> `BOGUS`/`SERVFAIL`, `INSECURE`, and `BLOCKED_CD` outcomes. ESP32
-> hardware integration and full baseline/performance benchmarking remain
-> pending. Features, tests, benchmarks, and hardware compatibility
-> should be marked complete only after they have been run and verified.
+> `BOGUS`/`SERVFAIL`, `INSECURE`, and `BLOCKED_CD` outcomes. The ESP32
+> firmware has now been built, uploaded, and executed on hardware. Four
+> consecutive hardware rounds observed the expected results for all three
+> DNSSEC test names over mutual TLS. Initial handshake and query latency
+> and free-heap measurements have been captured; extended evaluation and
+> baseline/performance benchmarking remain pending. Features, tests,
+> benchmarks, and hardware compatibility should be marked complete only
+> after they have been run and verified.
 
 ## Table of Contents
 
@@ -87,9 +91,11 @@ Python gateway -- HTTP POST /api/metrics --> Express + Socket.io
 7.  The client should accept or reject the result according to the
     documented protocol and policy.
 
-The current local test path exercises the Docker-based resolver and
-gateway using `src/scripts/test_gateway.py`. ESP32 is the target hardware
-client; its real hardware integration is not yet verified.
+The local test path exercises the Docker-based resolver and gateway
+using `src/scripts/test_gateway.py`. The ESP32 client has also been
+uploaded and executed on target hardware; its initial DNSSEC outcomes
+and timing measurements are recorded in Section 7. Extended hardware
+security testing and benchmarking remain in progress.
 
 ### Important trust boundary
 
@@ -398,16 +404,43 @@ CN for each device if you need to tell multiple devices apart. The
 dashboard keeps up to 2,000 recent events in memory and replays them to
 the page after a refresh while the dashboard process remains running.
 
-The firmware uses the secure client header available in the selected
-ESP32 Arduino core (`WiFiClientSecure.h`, or
-`NetworkClientSecure.h` as a fallback), implements DNS-over-TLS framing
-with a 2-byte message-length prefix, sends DNS A queries, checks the
-response transaction ID, and prints response status and query latency
-over Serial. The ESP32 reports the response AD flag; it does not
-independently validate DNSSEC. DNSSEC validation is performed by the
-gateway's configured resolver. **Physical ESP32 integration is pending
-and must not be described as verified until tested on the target
-board.**
+The firmware uses
+`WiFiClientSecure`, implements DNS-over-TLS framing with a 2-byte
+message-length prefix, sends DNS A queries, and prints response status
+and query latency over Serial. The client is configured for mutual TLS
+using the trusted CA certificate, client certificate, and client private
+key. It verifies the DNS transaction ID and consumes response bodies in
+bounded chunks; query read or identity failures terminate the TLS
+connection rather than continuing with an uncertain stream. The source
+has explicit `<string.h>` and `<esp_system.h>` includes for its direct
+`strlen`/`strchr`/`memcpy` and `esp_random()` use. The firmware build,
+upload, and hardware execution have been completed.
+
+### Initial ESP32 hardware results
+
+The following observations were captured from four consecutive rounds
+on the ESP32. Each round established a TLS connection and queried all
+three test names. These are initial samples, not a completed benchmark.
+
+| Measurement | Observed result |
+| --- | ---: |
+| TLS handshake latency | 891–907 ms; mean 899.5 ms (4 samples) |
+| `valid.aegis.test` | `NOERROR`, `AD=1`, transaction ID matched in all 4 samples |
+| `bogus.aegis.test` | `SERVFAIL`, `AD=0`, transaction ID matched in all 4 samples |
+| `insecure.aegis.test` | `NOERROR`, `AD=0`, transaction ID matched in all 4 samples |
+| Valid-query latency | 13.84–43.78 ms; mean 26.55 ms (4 samples) |
+| Bogus-query latency | 18.52–53.53 ms; mean 27.28 ms (4 samples) |
+| Insecure-query latency | 18.00–53.26 ms; mean 34.56 ms (4 samples) |
+| Free heap after TLS handshake | 181,468–181,496 bytes |
+
+The observed DNSSEC behavior is consistent with the expected validating
+resolver outcomes: valid data is returned with the AD flag set, bogus
+data is rejected with `SERVFAIL`, and insecure data is returned without
+AD. DNSSEC validation occurs at the gateway's configured resolver; the
+ESP32 does not independently validate DNSSEC signatures. Query latency
+is measured by the firmware from before the query write until the full
+response has been consumed, and therefore includes client-side send/read
+time as well as gateway/resolver response time.
 
 ### Firmware checklist
 
@@ -482,8 +515,8 @@ They must accept the invitation.
 ### Teammate: clone and create a branch
 
 ``` powershell
-git clone https://github.com/<OWNER>/AegisDNS.git
-cd AegisDNS
+git clone https://github.com/aiori-hackathon/A3-PS004-TC399.git
+cd A3-PS004-TC399
 git switch -c feature/esp32-integration
 Copy-Item .env.example .env
 docker compose --env-file .env -f src/docker-compose.yml --profile tools run --rm certgen
@@ -709,12 +742,28 @@ Update it only when a task has actually been completed and verified.
 -   [x] Gateway telemetry can be sent to the dashboard during the local
     test flow.
 
+### Verified ESP32 milestones
+
+-   [x] Compile the ESP32 firmware with PlatformIO.
+-   [x] Upload the firmware and execute it on the target ESP32 hardware.
+-   [x] Establish the configured mutual-TLS connection to the gateway
+    and receive DNS responses for the three test names.
+-   [x] Observe the expected valid (`NOERROR`, `AD=1`), bogus
+    (`SERVFAIL`, `AD=0`), and insecure (`NOERROR`, `AD=0`) outcomes
+    across four consecutive rounds.
+-   [x] Capture initial TLS handshake latency, query latency, transaction
+    ID match, and free-heap readings in the serial output.
+
 ### Pending milestones
 
--   [ ] Verify ESP32 compilation and connection to the gateway using
-    real mutual TLS.
--   [ ] Confirm hostname verification and a no-plaintext-fallback
+-   [ ] Run at least 30–50 consecutive rounds and save the complete
+    serial output for extended evaluation.
+-   [ ] Calculate mean, median, minimum, maximum, and p95 query latency
+    from the extended sample set.
+-   [ ] Confirm hostname verification and test the no-plaintext-fallback
     failure path on hardware.
+-   [ ] Test rejection of an untrusted gateway certificate and an
+    invalid client certificate.
 -   [ ] Confirm ESP32 test requests appear on the live dashboard.
 -   [ ] Persist structured events to JSONL/CSV for repeatable
     evaluation.
@@ -747,8 +796,10 @@ Compare clearly defined configurations:
 
 Report measured values only. Save raw results as CSV or JSON and
 generate charts from those files. Include the test environment and
-methodology so results can be reproduced. The full baseline/performance
-benchmark and ESP32 resource measurements are currently pending.
+methodology so results can be reproduced. Initial ESP32 timing and heap
+measurements are available in Section 7, but the extended sample set,
+full baseline/performance benchmark, and broader ESP32 resource
+measurements are still pending.
 
 ## 12. References
 
