@@ -155,9 +155,7 @@ AegisDNS/
 
 All application folders and Docker configuration are under `src/`.
 Generated DNSSEC material is written beneath `src/dns/generated/`; local
-TLS/PKI files are under `src/pki/`. These generated and private files
-must not be committed. The layout above describes the current project
-structure; update it if repository files change.
+TLS/PKI files are under `src/pki/`.
 
 ### What changed and where to run commands
 
@@ -487,72 +485,7 @@ from the certificate SAN. Check the generated certificate and configure
 device hostname resolution accordingly. **Do not disable certificate
 verification** to work around name mismatches.
 
-## 8. Git Collaboration Workflow
-
-Use a separate branch per task. Avoid committing directly to `main` for
-ongoing feature work.
-
-### First publish (repository owner)
-
-Create an **empty** GitHub repository; do not generate an additional
-GitHub README or `.gitignore` because these already exist locally. From
-the project folder:
-
-``` powershell
-git status
-git remote add origin https://github.com/<OWNER>/AegisDNS.git
-git push -u origin main
-```
-
-Replace `<OWNER>` with the GitHub account or organization. If `origin`
-already exists, inspect `git remote -v` rather than adding it again.
-Keep the repository private until secrets and publication choices have
-been reviewed.
-
-Invite teammates from GitHub repository **Settings → Collaborators**.
-They must accept the invitation.
-
-### Teammate: clone and create a branch
-
-``` powershell
-git clone https://github.com/aiori-hackathon/A3-PS004-TC399.git
-cd A3-PS004-TC399
-git switch -c feature/esp32-integration
-Copy-Item .env.example .env
-docker compose --env-file .env -f src/docker-compose.yml --profile tools run --rm certgen
-docker compose --env-file .env -f src/docker-compose.yml up --build -d
-```
-
-If a teammate is working on firmware without access to the ESP32 yet,
-they can edit and compile-check the source when their toolchain is
-available. Physical connectivity and TLS validation require hardware and
-authorized credentials.
-
-### Each contributor: commit and push a branch
-
-``` powershell
-git status
-git add src/esp32/src/main.cpp
-git commit -m "feat(esp32): improve gateway client"
-git push -u origin feature/esp32-integration
-```
-
-Stage only the files relevant to your change. Open a pull request to
-merge the feature branch into `main`. For dashboard work, use a separate
-branch such as `feature/dashboard-ui` and stage the relevant
-`src/dashboard/` files.
-
-Before every push, check for accidentally staged secrets:
-
-``` powershell
-git status --short
-git diff --cached --name-only
-```
-
-Repository privacy is not a substitute for keeping private credentials
-out of Git.
-
-## 9. Security Principles, Threat Model, and Limitations
+## 8. Security Principles, Threat Model, and Limitations
 
 ### Security principles
 
@@ -567,11 +500,6 @@ AegisDNS keeps three security functions distinct:
 -   **Gateway policy enforcement:** Decides whether a response may be
     returned based on the trusted resolver's validation outcome and the
     configured policy.
-
-The gateway must not trust a client-supplied claim that a result is
-secure. A successful DNS lookup must not be treated as proof of DNSSEC
-validation. Validation status and the policy decision must be
-represented separately.
 
 ### Validation outcomes and intended handling
 
@@ -794,13 +722,6 @@ Compare clearly defined configurations:
 3.  **Negative cases:** Bogus DNSSEC responses and unauthenticated
     connection attempts.
 
-Report measured values only. Save raw results as CSV or JSON and
-generate charts from those files. Include the test environment and
-methodology so results can be reproduced. Initial ESP32 timing and heap
-measurements are available in Section 7, but the extended sample set,
-full baseline/performance benchmark, and broader ESP32 resource
-measurements are still pending.
-
 ## 12. References
 
 -   [RFC 4033 --- DNS Security Introduction and
@@ -817,22 +738,9 @@ measurements are still pending.
 -   [FastAPI Documentation](https://fastapi.tiangolo.com/)
 -   [Python Documentation](https://docs.python.org/3/)
 
-Consult the relevant RFCs and official documentation when implementing
-protocol behavior. Do not claim that a reference supports a feature
-without verifying the relevant section.
-
 ------------------------------------------------------------------------
-
-**Contributing guidelines:** Keep changes focused and documented, add
-tests for new behavior, never commit private keys or credentials, record
-actual test and benchmark results, clearly identify incomplete or
-simulated functionality, and document changes to the threat model or
-validation policy.
 
 **Disclaimer:** AegisDNS is an educational hackathon prototype. Do not
 deploy it to protect critical infrastructure without a full security
 review, appropriate operational controls, and validation in the intended
 environment.
-
-**Keep secrets local. Commit source code and documentation; never commit
-live credentials.**

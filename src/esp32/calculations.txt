@@ -15,3 +15,67 @@ Per domain (mean / median / p95):
 valid.aegis.test: 29.66 / 19.38 / 48.80 ms
 bogus.aegis.test: 29.83 / 18.54 / 53.40 ms
 insecure.aegis.test: 28.34 / 18.93 / 52.99 ms
+----------------------------------------------------------------------
+Updated query latency statistics
+Source: src/esp32/output.txt (updated output)
+Samples: 450 total (150 per domain)
+Round starts: 150
+Units: milliseconds
+P95 method: nearest rank
+
+Aggregate:
+Mean: 24.04 ms
+Median: 18.54 ms
+Minimum: 12.99 ms
+Maximum: 228.53 ms
+P95: 48.00 ms
+
+Per domain (mean / median / p95):
+valid.aegis.test: 24.04 / 18.82 / 43.79 ms
+bogus.aegis.test: 25.84 / 18.53 / 48.52 ms
+insecure.aegis.test: 22.24 / 18.00 / 48.00 ms
+--------------------------------------------------------------------------------------
+First 50 round starts
+Source: src/esp32/output.txt (rounds 1-50)
+Rounds: 50
+Samples: 150 total (50 per domain)
+Units: milliseconds
+P95 method: nearest rank
+
+Aggregate:
+Mean: 29.13 ms
+Median: 18.97 ms
+Minimum: 12.99 ms
+Maximum: 228.53 ms
+P95: 53.26 ms
+
+Per domain (mean / median / p95):
+valid.aegis.test: 29.56 / 19.60 / 48.80 ms
+bogus.aegis.test: 29.32 / 18.54 / 53.53 ms
+insecure.aegis.test: 28.51 / 18.85 / 52.99 ms
+--------------------------------------------------------------------------------------------------------
+TLS handshake latency (separate from DNS query latency)
+Source: src/esp32/output.txt (all successful TLS_HANDSHAKE_OK records)
+Samples: 150
+Units: milliseconds (integer handshake_ms values)
+P95 method: nearest rank
+
+Aggregate:
+Mean: 887.55 ms
+Median: 865 ms
+Minimum: 850 ms
+Maximum: 1251 ms
+P95: 989 ms
+
+TLS handshake latency for first 50 round starts
+Source: src/esp32/output.txt (rounds 1-50)
+Samples: 50
+Units: milliseconds (integer handshake_ms values)
+P95 method: nearest rank
+
+Mean: 914.02 ms
+Median: 891 ms
+Minimum: 855 ms
+Maximum: 1251 ms
+P95: 1152 ms
+-------------------------------------------------------------------------------

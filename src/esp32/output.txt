@@ -505,3 +505,398 @@
 21:05:01.123 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=19.65,free_heap=181552
 21:05:01.143 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.53,free_heap=181552
 21:05:01.157 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=12.99,free_heap=181552
+21:05:16.159 > --- round start, free_heap=224108 ---
+21:05:17.021 > TLS_HANDSHAKE_OK,handshake_ms=861,free_heap=181552
+21:05:17.048 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=23.86,free_heap=181552
+21:05:17.067 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.52,free_heap=181552
+21:05:17.086 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.21,free_heap=181552
+21:05:32.087 > 
+21:05:32.087 > --- round start, free_heap=224108 ---
+21:05:32.972 > TLS_HANDSHAKE_OK,handshake_ms=883,free_heap=181564
+21:05:32.993 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.86,free_heap=181564
+21:05:33.028 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=33.30,free_heap=181564
+21:05:33.047 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=17.95,free_heap=181564
+21:05:48.048 > 
+21:05:48.048 > --- round start, free_heap=224108 ---
+21:05:48.906 > TLS_HANDSHAKE_OK,handshake_ms=856,free_heap=181616
+21:05:48.927 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.77,free_heap=181616
+21:05:48.946 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.30,free_heap=181616
+21:05:48.966 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=17.95,free_heap=181616
+21:06:03.967 > 
+21:06:03.967 > --- round start, free_heap=224108 ---
+21:06:04.830 > TLS_HANDSHAKE_OK,handshake_ms=862,free_heap=181600
+21:06:04.847 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.86,free_heap=181600
+21:06:04.866 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.53,free_heap=181600
+21:06:04.896 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=28.32,free_heap=181600
+21:06:19.897 > 
+21:06:19.898 > --- round start, free_heap=224108 ---
+21:06:20.755 > TLS_HANDSHAKE_OK,handshake_ms=855,free_heap=181552
+21:06:20.776 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=19.42,free_heap=181552
+21:06:20.791 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=13.53,free_heap=181552
+21:06:20.805 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=13.10,free_heap=181552
+21:06:35.806 > 
+21:06:35.807 > --- round start, free_heap=224108 ---
+21:06:36.670 > TLS_HANDSHAKE_OK,handshake_ms=862,free_heap=181544
+21:06:36.686 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.73,free_heap=181544
+21:06:36.706 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.52,free_heap=181544
+21:06:36.725 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.03,free_heap=181544
+21:06:51.726 > 
+21:06:51.726 > --- round start, free_heap=224108 ---
+21:06:52.584 > TLS_HANDSHAKE_OK,handshake_ms=856,free_heap=181620
+21:06:52.605 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.81,free_heap=181620
+21:06:52.625 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.60,free_heap=181620
+21:06:52.654 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=27.93,free_heap=181620
+21:07:07.655 > 
+21:07:07.655 > --- round start, free_heap=224108 ---
+21:07:08.515 > TLS_HANDSHAKE_OK,handshake_ms=858,free_heap=181552
+21:07:08.531 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.78,free_heap=181552
+21:07:08.546 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=13.77,free_heap=181552
+21:07:08.566 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.76,free_heap=181552
+21:07:23.567 > 
+21:07:23.567 > --- round start, free_heap=224108 ---
+21:07:24.430 > TLS_HANDSHAKE_OK,handshake_ms=861,free_heap=181552
+21:07:24.446 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.81,free_heap=181552
+21:07:24.466 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.54,free_heap=181552
+21:07:24.481 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=13.76,free_heap=181552
+21:07:39.482 > 
+21:07:39.482 > --- round start, free_heap=224108 ---
+21:07:40.349 > TLS_HANDSHAKE_OK,handshake_ms=865,free_heap=181552
+21:07:40.365 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.74,free_heap=181552
+21:07:40.384 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.53,free_heap=181552
+21:07:40.399 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=12.99,free_heap=181552
+21:07:55.400 > 
+21:07:55.400 > --- round start, free_heap=224108 ---
+21:07:56.261 > TLS_HANDSHAKE_OK,handshake_ms=860,free_heap=181552
+21:07:56.277 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.78,free_heap=181552
+21:07:56.297 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.52,free_heap=181552
+21:07:56.317 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=19.00,free_heap=181552
+21:08:11.318 > 
+21:08:11.319 > --- round start, free_heap=224108 ---
+21:08:12.309 > TLS_HANDSHAKE_OK,handshake_ms=989,free_heap=181552
+21:08:12.350 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=38.77,free_heap=181552
+21:08:12.415 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=63.53,free_heap=181552
+21:08:12.429 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=13.12,free_heap=181552
+21:08:27.430 > 
+21:08:27.430 > --- round start, free_heap=224064 ---
+21:08:28.295 > TLS_HANDSHAKE_OK,handshake_ms=862,free_heap=181504
+21:08:28.310 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.93,free_heap=181504
+21:08:28.330 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.38,free_heap=181504
+21:08:28.354 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=23.02,free_heap=181504
+21:08:43.355 > 
+21:08:43.355 > --- round start, free_heap=224064 ---
+21:08:44.220 > TLS_HANDSHAKE_OK,handshake_ms=863,free_heap=181500
+21:08:44.242 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=19.57,free_heap=181500
+21:08:44.281 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=38.52,free_heap=181500
+21:08:44.301 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181500
+21:08:59.302 > 
+21:08:59.302 > --- round start, free_heap=224064 ---
+21:09:00.162 > TLS_HANDSHAKE_OK,handshake_ms=858,free_heap=181492
+21:09:00.178 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.79,free_heap=181492
+21:09:00.212 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=33.30,free_heap=181492
+21:09:00.232 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=17.95,free_heap=181492
+21:09:15.233 > 
+21:09:15.233 > --- round start, free_heap=224064 ---
+21:09:16.110 > TLS_HANDSHAKE_OK,handshake_ms=875,free_heap=181492
+21:09:16.131 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.79,free_heap=181492
+21:09:16.165 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=33.30,free_heap=181492
+21:09:16.189 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=22.95,free_heap=181492
+21:09:31.189 > 
+21:09:31.190 > --- round start, free_heap=224064 ---
+21:09:32.056 > TLS_HANDSHAKE_OK,handshake_ms=865,free_heap=181504
+21:09:32.077 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.76,free_heap=181504
+21:09:32.122 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=43.52,free_heap=181504
+21:09:32.142 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181504
+21:09:47.142 > 
+21:09:47.142 > --- round start, free_heap=224064 ---
+21:09:48.006 > TLS_HANDSHAKE_OK,handshake_ms=862,free_heap=181564
+21:09:48.027 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.79,free_heap=181564
+21:09:48.047 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.52,free_heap=181564
+21:09:48.066 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=17.99,free_heap=181564
+21:10:03.067 > 
+21:10:03.068 > --- round start, free_heap=224040 ---
+21:10:03.919 > TLS_HANDSHAKE_OK,handshake_ms=850,free_heap=181492
+21:10:03.935 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.78,free_heap=181492
+21:10:03.960 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=23.52,free_heap=181492
+21:10:03.979 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181492
+21:10:18.980 > 
+21:10:18.980 > --- round start, free_heap=224064 ---
+21:10:19.846 > TLS_HANDSHAKE_OK,handshake_ms=864,free_heap=181504
+21:10:19.867 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.85,free_heap=181504
+21:10:19.893 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=24.17,free_heap=181504
+21:10:19.914 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=20.00,free_heap=181504
+21:10:34.915 > 
+21:10:34.915 > --- round start, free_heap=224064 ---
+21:10:35.773 > TLS_HANDSHAKE_OK,handshake_ms=856,free_heap=181492
+21:10:35.799 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=23.80,free_heap=181492
+21:10:35.818 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.52,free_heap=181492
+21:10:35.838 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.27,free_heap=181492
+21:10:50.839 > 
+21:10:50.839 > --- round start, free_heap=224064 ---
+21:10:51.712 > TLS_HANDSHAKE_OK,handshake_ms=871,free_heap=181504
+21:10:51.730 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=15.85,free_heap=181504
+21:10:51.759 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=28.37,free_heap=181504
+21:10:51.779 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.16,free_heap=181504
+21:11:06.779 > 
+21:11:06.780 > --- round start, free_heap=224064 ---
+21:11:07.672 > TLS_HANDSHAKE_OK,handshake_ms=891,free_heap=181572
+21:11:07.703 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=28.79,free_heap=181572
+21:11:07.723 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.53,free_heap=181572
+21:11:07.742 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=17.99,free_heap=181572
+21:11:22.743 > 
+21:11:22.744 > --- round start, free_heap=224064 ---
+21:11:23.600 > TLS_HANDSHAKE_OK,handshake_ms=855,free_heap=181492
+21:11:23.622 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.79,free_heap=181492
+21:11:23.641 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.30,free_heap=181492
+21:11:23.660 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.04,free_heap=181492
+21:11:38.661 > 
+21:11:38.661 > --- round start, free_heap=224064 ---
+21:11:39.519 > TLS_HANDSHAKE_OK,handshake_ms=856,free_heap=181496
+21:11:39.540 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.82,free_heap=181496
+21:11:39.565 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=23.53,free_heap=181496
+21:11:39.584 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181496
+21:11:54.585 > 
+21:11:54.585 > --- round start, free_heap=224064 ---
+21:11:55.448 > TLS_HANDSHAKE_OK,handshake_ms=861,free_heap=181504
+21:11:55.489 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=38.78,free_heap=181504
+21:11:55.510 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=19.00,free_heap=181504
+21:11:55.530 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.73,free_heap=181504
+21:12:10.531 > 
+21:12:10.531 > --- round start, free_heap=224064 ---
+21:12:11.396 > TLS_HANDSHAKE_OK,handshake_ms=863,free_heap=181516
+21:12:11.413 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=14.58,free_heap=181504
+21:12:11.432 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.52,free_heap=181504
+21:12:11.451 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181504
+21:12:26.453 > 
+21:12:26.453 > --- round start, free_heap=224064 ---
+21:12:27.317 > TLS_HANDSHAKE_OK,handshake_ms=862,free_heap=181556
+21:12:27.338 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.86,free_heap=181556
+21:12:27.362 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=23.53,free_heap=181556
+21:12:27.381 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=17.99,free_heap=181556
+21:12:42.382 > 
+21:12:42.383 > --- round start, free_heap=224064 ---
+21:12:43.245 > TLS_HANDSHAKE_OK,handshake_ms=861,free_heap=181492
+21:12:43.266 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.80,free_heap=181492
+21:12:43.291 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=23.54,free_heap=181492
+21:12:43.310 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=17.98,free_heap=181492
+21:12:58.311 > 
+21:12:58.312 > --- round start, free_heap=224064 ---
+21:12:59.166 > TLS_HANDSHAKE_OK,handshake_ms=853,free_heap=181568
+21:12:59.182 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.97,free_heap=181568
+21:12:59.207 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=23.52,free_heap=181568
+21:12:59.226 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181568
+21:13:14.227 > 
+21:13:14.227 > --- round start, free_heap=224064 ---
+21:13:15.086 > TLS_HANDSHAKE_OK,handshake_ms=857,free_heap=181492
+21:13:15.107 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.78,free_heap=181492
+21:13:15.128 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.52,free_heap=181492
+21:13:15.147 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.76,free_heap=181492
+21:13:30.148 > 
+21:13:30.148 > --- round start, free_heap=224064 ---
+21:13:31.018 > TLS_HANDSHAKE_OK,handshake_ms=868,free_heap=181524
+21:13:31.044 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=23.78,free_heap=181524
+21:13:31.063 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.53,free_heap=181524
+21:13:31.083 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=17.99,free_heap=181524
+21:13:46.084 > 
+21:13:46.084 > --- round start, free_heap=224064 ---
+21:13:46.945 > TLS_HANDSHAKE_OK,handshake_ms=859,free_heap=181492
+21:13:46.966 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.84,free_heap=181492
+21:13:46.980 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=13.47,free_heap=181492
+21:13:47.000 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181492
+21:14:02.001 > 
+21:14:02.001 > --- round start, free_heap=224064 ---
+21:14:02.860 > TLS_HANDSHAKE_OK,handshake_ms=858,free_heap=181568
+21:14:02.877 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.82,free_heap=181568
+21:14:02.901 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=23.52,free_heap=181564
+21:14:02.920 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.07,free_heap=181564
+21:14:17.921 > 
+21:14:17.921 > --- round start, free_heap=224064 ---
+21:14:18.781 > TLS_HANDSHAKE_OK,handshake_ms=859,free_heap=181492
+21:14:18.797 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.77,free_heap=181492
+21:14:18.842 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=43.52,free_heap=181492
+21:14:18.862 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.34,free_heap=181468
+21:14:33.862 > 
+21:14:33.863 > --- round start, free_heap=224064 ---
+21:14:34.726 > TLS_HANDSHAKE_OK,handshake_ms=862,free_heap=181508
+21:14:34.752 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=23.77,free_heap=181508
+21:14:34.772 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.53,free_heap=181508
+21:14:34.806 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=32.99,free_heap=181508
+21:14:49.808 > 
+21:14:49.808 > --- round start, free_heap=224064 ---
+21:14:50.673 > TLS_HANDSHAKE_OK,handshake_ms=864,free_heap=181356
+21:14:50.699 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=24.04,free_heap=181560
+21:14:50.719 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.30,free_heap=181560
+21:14:50.738 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.06,free_heap=181560
+21:15:05.739 > 
+21:15:05.739 > --- round start, free_heap=224064 ---
+21:15:06.607 > TLS_HANDSHAKE_OK,handshake_ms=866,free_heap=181492
+21:15:06.623 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.77,free_heap=181492
+21:15:06.642 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.52,free_heap=181492
+21:15:06.657 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=13.00,free_heap=181492
+21:15:21.658 > 
+21:15:21.658 > --- round start, free_heap=224064 ---
+21:15:22.525 > TLS_HANDSHAKE_OK,handshake_ms=865,free_heap=181496
+21:15:22.541 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.80,free_heap=181496
+21:15:22.561 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.83,free_heap=181496
+21:15:22.585 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=23.69,free_heap=181496
+21:15:37.586 > 
+21:15:37.586 > --- round start, free_heap=224064 ---
+21:15:38.453 > TLS_HANDSHAKE_OK,handshake_ms=865,free_heap=181520
+21:15:38.474 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.75,free_heap=181520
+21:15:38.493 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.30,free_heap=181520
+21:15:38.512 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=17.95,free_heap=181520
+21:15:53.512 > 
+21:15:53.513 > --- round start, free_heap=224064 ---
+21:15:54.370 > TLS_HANDSHAKE_OK,handshake_ms=856,free_heap=181524
+21:15:54.391 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.80,free_heap=181524
+21:15:54.411 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.52,free_heap=181524
+21:15:54.430 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181524
+21:16:09.431 > 
+21:16:09.432 > --- round start, free_heap=224064 ---
+21:16:10.312 > TLS_HANDSHAKE_OK,handshake_ms=879,free_heap=181492
+21:16:10.334 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.75,free_heap=181492
+21:16:10.378 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=43.30,free_heap=181492
+21:16:10.399 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=19.47,free_heap=181504
+21:16:25.399 > 
+21:16:25.399 > --- round start, free_heap=224064 ---
+21:16:26.269 > TLS_HANDSHAKE_OK,handshake_ms=868,free_heap=181520
+21:16:26.300 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=28.77,free_heap=181520
+21:16:26.316 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=13.53,free_heap=181520
+21:16:26.334 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181520
+21:16:41.335 > 
+21:16:41.335 > --- round start, free_heap=224064 ---
+21:16:42.206 > TLS_HANDSHAKE_OK,handshake_ms=869,free_heap=181492
+21:16:42.227 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=19.08,free_heap=181492
+21:16:42.247 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.20,free_heap=181492
+21:16:42.266 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181492
+21:16:57.267 > 
+21:16:57.267 > --- round start, free_heap=224064 ---
+21:16:58.136 > TLS_HANDSHAKE_OK,handshake_ms=867,free_heap=181504
+21:16:58.157 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.74,free_heap=181504
+21:16:58.176 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.52,free_heap=181504
+21:16:58.195 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=17.99,free_heap=181504
+21:17:13.196 > 
+21:17:13.196 > --- round start, free_heap=224064 ---
+21:17:14.079 > TLS_HANDSHAKE_OK,handshake_ms=881,free_heap=181492
+21:17:14.095 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.81,free_heap=181492
+21:17:14.114 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.53,free_heap=181492
+21:17:14.139 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=22.99,free_heap=181492
+21:17:29.140 > 
+21:17:29.140 > --- round start, free_heap=224064 ---
+21:17:30.027 > TLS_HANDSHAKE_OK,handshake_ms=886,free_heap=181516
+21:17:30.053 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=23.81,free_heap=181516
+21:17:30.098 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=43.52,free_heap=181516
+21:17:30.117 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181516
+21:17:45.118 > 
+21:17:45.119 > --- round start, free_heap=224064 ---
+21:17:45.974 > TLS_HANDSHAKE_OK,handshake_ms=854,free_heap=181504
+21:17:45.995 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.70,free_heap=181504
+21:17:46.015 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.52,free_heap=181504
+21:17:46.034 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=17.99,free_heap=181504
+21:18:01.034 > 
+21:18:01.034 > --- round start, free_heap=224064 ---
+21:18:01.893 > TLS_HANDSHAKE_OK,handshake_ms=857,free_heap=181512
+21:18:01.920 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=24.72,free_heap=181512
+21:18:01.940 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.52,free_heap=181512
+21:18:01.959 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181512
+21:18:16.960 > 
+21:18:16.960 > --- round start, free_heap=224064 ---
+21:18:17.821 > TLS_HANDSHAKE_OK,handshake_ms=859,free_heap=181504
+21:18:17.842 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.76,free_heap=181504
+21:18:17.867 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=24.18,free_heap=181504
+21:18:17.887 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.11,free_heap=181504
+21:18:32.888 > 
+21:18:32.888 > --- round start, free_heap=224064 ---
+21:18:33.761 > TLS_HANDSHAKE_OK,handshake_ms=871,free_heap=181556
+21:18:33.782 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.69,free_heap=181556
+21:18:33.796 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=13.53,free_heap=181556
+21:18:33.815 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181556
+21:18:48.817 > 
+21:18:48.817 > --- round start, free_heap=224064 ---
+21:18:49.673 > TLS_HANDSHAKE_OK,handshake_ms=854,free_heap=181492
+21:18:49.689 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.80,free_heap=181492
+21:18:49.708 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.52,free_heap=181492
+21:18:49.727 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181492
+21:19:04.729 > 
+21:19:04.729 > --- round start, free_heap=224064 ---
+21:19:05.591 > TLS_HANDSHAKE_OK,handshake_ms=861,free_heap=181492
+21:19:05.618 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=23.77,free_heap=181492
+21:19:05.637 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.30,free_heap=181492
+21:19:05.656 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=17.95,free_heap=181492
+21:19:20.657 > 
+21:19:20.658 > --- round start, free_heap=224064 ---
+21:19:21.514 > TLS_HANDSHAKE_OK,handshake_ms=855,free_heap=181504
+21:19:21.535 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.85,free_heap=181504
+21:19:21.555 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.52,free_heap=181504
+21:19:21.575 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=19.01,free_heap=181504
+21:19:36.576 > 
+21:19:36.576 > --- round start, free_heap=224064 ---
+21:19:37.441 > TLS_HANDSHAKE_OK,handshake_ms=863,free_heap=181492
+21:19:37.462 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.78,free_heap=181492
+21:19:37.482 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.52,free_heap=181492
+21:19:37.501 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181492
+21:19:52.502 > 
+21:19:52.502 > --- round start, free_heap=224064 ---
+21:19:53.360 > TLS_HANDSHAKE_OK,handshake_ms=856,free_heap=181504
+21:19:53.376 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.73,free_heap=181504
+21:19:53.390 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=13.53,free_heap=181504
+21:19:53.411 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=19.00,free_heap=181500
+21:20:08.412 > 
+21:20:08.412 > --- round start, free_heap=224064 ---
+21:20:09.290 > TLS_HANDSHAKE_OK,handshake_ms=876,free_heap=181496
+21:20:09.306 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.78,free_heap=181496
+21:20:09.325 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.52,free_heap=181496
+21:20:09.345 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181496
+21:20:24.346 > 
+21:20:24.346 > --- round start, free_heap=224064 ---
+21:20:25.233 > TLS_HANDSHAKE_OK,handshake_ms=885,free_heap=181500
+21:20:25.249 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.81,free_heap=181500
+21:20:25.269 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.65,free_heap=181500
+21:20:25.288 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=17.99,free_heap=181500
+21:20:40.289 > 
+21:20:40.290 > --- round start, free_heap=224064 ---
+21:20:41.148 > TLS_HANDSHAKE_OK,handshake_ms=857,free_heap=181492
+21:20:41.165 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.84,free_heap=181492
+21:20:41.184 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.50,free_heap=181492
+21:20:41.204 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.76,free_heap=181492
+21:20:56.205 > 
+21:20:56.206 > --- round start, free_heap=224064 ---
+21:20:57.066 > TLS_HANDSHAKE_OK,handshake_ms=859,free_heap=181568
+21:20:57.082 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.86,free_heap=181568
+21:20:57.102 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.52,free_heap=181568
+21:20:57.121 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=17.99,free_heap=181568
+21:21:12.122 > 
+21:21:12.122 > --- round start, free_heap=224064 ---
+21:21:12.980 > TLS_HANDSHAKE_OK,handshake_ms=856,free_heap=181488
+21:21:13.001 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.78,free_heap=181488
+21:21:13.021 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.53,free_heap=181488
+21:21:13.035 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=13.00,free_heap=181488
+21:21:28.035 > 
+21:21:28.035 > --- round start, free_heap=224064 ---
+21:21:28.912 > TLS_HANDSHAKE_OK,handshake_ms=875,free_heap=181524
+21:21:28.929 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=14.61,free_heap=181524
+21:21:28.948 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.53,free_heap=181524
+21:21:28.968 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=17.99,free_heap=181524
+21:21:43.969 > 
+21:21:43.969 > --- round start, free_heap=224064 ---
+21:21:44.832 > TLS_HANDSHAKE_OK,handshake_ms=861,free_heap=181516
+21:21:44.848 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.78,free_heap=181516
+21:21:44.862 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=13.53,free_heap=181516
+21:21:44.881 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181516
+21:21:59.883 > 
+21:21:59.883 > --- round start, free_heap=224064 ---
+21:22:00.741 > TLS_HANDSHAKE_OK,handshake_ms=856,free_heap=181516
+21:22:00.757 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=13.94,free_heap=181516
+21:22:00.776 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.37,free_heap=181516
+21:22:00.795 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181516
+21:22:15.796 > 
+21:22:15.797 > --- round start, free_heap=224064 ---
+21:22:16.669 > TLS_HANDSHAKE_OK,handshake_ms=871,free_heap=181504
+21:22:16.691 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.77,free_heap=181504
+21:22:16.710 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.52,free_heap=181504
+21:22:16.729 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=18.00,free_heap=181504
+21:22:31.730 > 
+21:22:31.731 > --- round start, free_heap=224064 ---
+21:22:32.600 > TLS_HANDSHAKE_OK,handshake_ms=868,free_heap=181504
+21:22:32.621 > RESULT,valid.aegis.test,NOERROR,rcode=0,AD=1,id_match=1,latency_ms=18.79,free_heap=181504
+21:22:32.641 > RESULT,bogus.aegis.test,SERVFAIL,rcode=2,AD=0,id_match=1,latency_ms=18.53,free_heap=181504
+21:22:32.660 > RESULT,insecure.aegis.test,NOERROR,rcode=0,AD=0,id_match=1,latency_ms=17.99,free_heap=181504
