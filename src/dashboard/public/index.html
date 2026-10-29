@@ -1,684 +1,730 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#10120f">
-  <meta name="description" content="AegisDNS real-time DNS security and resolver telemetry console.">
-  <title>AegisDNS — Security Operations</title>
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="/vendor/chart.umd.js"></script>
-  <style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>AegisDNS: live DNS verdicts</title>
+<script src="/socket.io/socket.io.js"></script>
+<script src="/vendor/chart.umd.js"></script>
+<style>
+  :root {
+    color-scheme: light dark;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    --paper: #edf0f4;
+    --sheet: #f9fafc;
+    --ink: #16213a;
+    --ink-2: #4a5670;
+    --ink-3: #6f7a92;
+    --rule: #ccd3df;
+    --guil: rgba(22, 33, 58, .05);
+    --verified: #0b7a66;
+    --unsigned: #9a5b00;
+    --failed: #b3261e;
+    --blocked: #6b3fa0;
+    --error: #56627a;
+    --focus: #1f5fd1;
+  }
+  @media (prefers-color-scheme: dark) {
     :root {
-      color-scheme: dark;
-      --bg: #10120f;
-      --bg-soft: #141713;
-      --panel: #181b16;
-      --panel-raised: #1d211a;
-      --panel-hover: #22271e;
-      --line: #30362b;
-      --line-soft: #262b23;
-      --text: #f0f2e9;
-      --muted: #a0a795;
-      --quiet: #737b6a;
-      --acid: #c8f169;
-      --acid-ink: #202714;
-      --amber: #f3b45e;
-      --red: #ff705f;
-      --red-bg: #43231f;
-      --green-bg: #29351b;
-      --amber-bg: #40301c;
-      --radius: 16px;
-      --shadow: 0 18px 50px rgba(0, 0, 0, .18);
+      --paper: #0f1727;
+      --sheet: #16203a;
+      --ink: #e6ebf5;
+      --ink-2: #a9b4cb;
+      --ink-3: #8390ab;
+      --rule: #2c3a58;
+      --guil: rgba(230, 235, 245, .04);
+      --verified: #3fd0af;
+      --unsigned: #e5a63f;
+      --failed: #ff7b6f;
+      --blocked: #bb9cf2;
+      --error: #98a4bc;
+      --focus: #7fb0ff;
     }
+  }
+  [data-v="verified"] { --c: var(--verified); }
+  [data-v="unsigned"] { --c: var(--unsigned); }
+  [data-v="failed"]   { --c: var(--failed); }
+  [data-v="blocked"]  { --c: var(--blocked); }
+  [data-v="error"]    { --c: var(--error); }
 
-    * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; scroll-padding-top: 92px; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      background:
-        radial-gradient(ellipse at 72% -15%, rgba(200, 241, 105, .07), transparent 42%),
-        var(--bg);
-      color: var(--text);
-      font: 14px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      letter-spacing: .005em;
-    }
-    button, input { font: inherit; }
-    button { color: inherit; }
-    button:focus-visible, a:focus-visible, input:focus-visible {
-      outline: 2px solid var(--acid); outline-offset: 3px;
-    }
-    a { color: inherit; text-decoration: none; }
-    .app-shell { min-height: 100vh; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink);
+    font: 15px/1.55 var(--sans); font-variant-numeric: tabular-nums;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background:
+      repeating-radial-gradient(circle at 8% -12%, transparent 0 15px, var(--guil) 15px 16px),
+      repeating-radial-gradient(circle at 96% 112%, transparent 0 15px, var(--guil) 15px 16px);
+  }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+  button { font: inherit; color: inherit; }
+  h1, h2, h3 { font-family: var(--serif); font-weight: 700; margin: 0; letter-spacing: -.01em; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 40px); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-    .sidebar {
-      position: fixed; inset: 0 auto 0 0; z-index: 20;
-      width: 232px; padding: 23px 15px 18px;
-      display: flex; flex-direction: column;
-      background: rgba(18, 21, 16, .96);
-      border-right: 1px solid var(--line-soft);
-      backdrop-filter: blur(16px);
-    }
-    .brand { display: flex; align-items: center; gap: 11px; padding: 0 10px 28px; }
-    .brand-mark {
-      display: grid; place-items: center; width: 37px; height: 37px;
-      background: var(--acid); color: var(--acid-ink); border-radius: 11px;
-      box-shadow: 0 0 26px rgba(200, 241, 105, .11);
-    }
-    .brand-mark svg { width: 22px; height: 22px; }
-    .brand-name { font-size: 15px; font-weight: 790; letter-spacing: .11em; }
-    .brand-sub { margin-top: 1px; font-size: 9px; font-weight: 700; color: var(--muted); letter-spacing: .18em; }
-    .nav-label { padding: 0 12px; margin: 7px 0 9px; color: var(--quiet); font-size: 10px; font-weight: 750; letter-spacing: .16em; text-transform: uppercase; }
-    .nav { display: grid; gap: 5px; }
-    .nav a {
-      display: flex; align-items: center; gap: 12px; padding: 11px 12px;
-      color: var(--muted); border: 1px solid transparent; border-radius: 10px;
-      transition: color .18s ease, background .18s ease, border-color .18s ease, transform .18s ease;
-    }
-    .nav a:hover { color: var(--text); background: var(--panel); transform: translateX(2px); }
-    .nav a.active { color: var(--acid); background: rgba(200, 241, 105, .075); border-color: rgba(200, 241, 105, .17); }
-    .nav svg { width: 17px; height: 17px; flex: 0 0 auto; }
-    .nav .nav-count { margin-left: auto; font-size: 10px; color: var(--quiet); font-variant-numeric: tabular-nums; }
-    .side-spacer { flex: 1; }
-    .pipeline-card { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(145deg, #1d2218, #151812); }
-    .pipeline-heading { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 750; }
-    .mini-pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--acid); box-shadow: 0 0 0 4px rgba(200, 241, 105, .09); }
-    .pipeline-card p { margin: 9px 0 0; color: var(--muted); font-size: 11px; line-height: 1.65; }
-    .side-foot { padding: 15px 10px 0; display: flex; justify-content: space-between; color: var(--quiet); font-size: 10px; }
+  /* Header */
+  .bar { border-bottom: 1px solid var(--rule); }
+  .bar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 66px; flex-wrap: wrap; padding-block: 10px; }
+  .wordmark { display: flex; align-items: center; gap: 12px; }
+  .wordmark svg { width: 30px; height: 30px; color: var(--verified); flex: none; }
+  .wordmark b { font: 700 21px var(--serif); letter-spacing: -.01em; }
+  .wordmark span { color: var(--ink-3); font-size: 13px; }
+  .bar-right { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .link { display: flex; align-items: center; gap: 8px; color: var(--ink-2); font-size: 13px; }
+  .link i { width: 9px; height: 9px; border-radius: 50%; background: var(--unsigned); }
+  .link.on i { background: var(--verified); }
+  .link.off i { background: var(--failed); }
+  .elapsed { color: var(--ink-3); font-size: 13px; }
 
-    .main-shell { margin-left: 232px; min-width: 0; }
-    .topbar {
-      min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 20px;
-      padding: 15px clamp(20px, 3vw, 42px); border-bottom: 1px solid var(--line-soft);
-      position: sticky; top: 0; z-index: 15; background: rgba(16, 18, 15, .86); backdrop-filter: blur(18px);
-    }
-    .crumb { color: var(--quiet); font-size: 11px; letter-spacing: .04em; }
-    .crumb strong { color: var(--text); font-weight: 650; }
-    .top-right { display: flex; align-items: center; gap: 17px; }
-    .feed-state { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 11px; white-space: nowrap; }
-    .state-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); flex: 0 0 auto; }
-    .state-dot.connected { background: var(--acid); box-shadow: 0 0 0 4px rgba(200, 241, 105, .09); animation: beacon 2.4s ease-out infinite; }
-    .state-dot.offline { background: var(--red); }
-    .clock { border-left: 1px solid var(--line); padding-left: 17px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .main-content { max-width: 1600px; margin: 0 auto; padding: 29px clamp(20px, 3vw, 42px) 36px; }
-    .eyebrow { display: flex; align-items: center; gap: 9px; color: var(--acid); text-transform: uppercase; letter-spacing: .17em; font-size: 10px; font-weight: 800; }
-    .eyebrow-line { width: 23px; height: 1px; background: var(--acid); }
-    .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 25px; margin-bottom: 25px; animation: rise-in .55s both; }
-    h1 { margin: 10px 0 8px; font-size: clamp(28px, 3.2vw, 43px); line-height: 1.07; letter-spacing: -.055em; font-weight: 720; }
-    h1 .accent { color: var(--acid); }
-    .hero-copy { margin: 0; color: var(--muted); max-width: 650px; font-size: 13px; }
-    .hero-meta { flex: 0 0 auto; display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 11px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(24, 27, 22, .75); }
-    .hero-meta svg { width: 15px; height: 15px; color: var(--acid); }
+  .btn {
+    min-height: 36px; padding: 0 14px; border: 1px solid var(--rule); border-radius: 6px;
+    background: var(--sheet); cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink);
+  }
+  .btn:hover { border-color: var(--ink-3); }
+  .btn[aria-pressed="true"], .btn.on { border-color: var(--ink); background: var(--ink); color: var(--sheet); }
+  .btn.quiet { background: transparent; }
+  .banner { margin: 0; padding: 9px 0; background: var(--unsigned); color: #fff; font-size: 13px; text-align: center; }
+  .banner[hidden] { display: none; }
 
-    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; margin-bottom: 17px; }
-    .metric-card { position: relative; min-width: 0; padding: 17px 18px 16px; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); transition: transform .2s ease, border-color .2s ease, background .2s ease; animation: rise-in .55s both; }
-    .metric-card:nth-child(2) { animation-delay: .05s; }
-    .metric-card:nth-child(3) { animation-delay: .1s; }
-    .metric-card:nth-child(4) { animation-delay: .15s; }
-    .metric-card:hover { transform: translateY(-3px); border-color: #49513d; background: var(--panel-raised); }
-    .metric-card::after { content: ""; position: absolute; width: 90px; height: 90px; border-radius: 50%; right: -44px; top: -49px; background: var(--glow, rgba(200, 241, 105, .08)); filter: blur(1px); pointer-events: none; }
-    .metric-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    .metric-label { color: var(--muted); font-size: 11px; font-weight: 600; }
-    .metric-icon { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line); color: var(--metric-color, var(--acid)); border-radius: 9px; background: rgba(255,255,255,.015); }
-    .metric-icon svg { width: 16px; height: 16px; }
-    .metric-value { margin-top: 10px; font-size: clamp(29px, 2.5vw, 36px); line-height: 1.05; font-weight: 760; letter-spacing: -.055em; font-variant-numeric: tabular-nums; }
-    .metric-foot { display: flex; align-items: center; gap: 7px; margin-top: 12px; color: var(--quiet); font-size: 10px; }
-    .tiny-mark { width: 5px; height: 5px; border-radius: 50%; background: var(--metric-color, var(--acid)); }
-    .metric-card.flash .metric-value { animation: number-pop .36s ease; }
+  /* Hero */
+  .hero { display: grid; grid-template-columns: minmax(300px, 390px) minmax(0, 1fr); gap: clamp(28px, 5vw, 60px); padding-block: 38px 30px; align-items: start; }
+  .page-title { font-size: clamp(26px, 3vw, 34px); line-height: 1.15; }
+  .page-lede { margin: 8px 0 22px; color: var(--ink-2); max-width: 56ch; }
 
-    .content-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(270px, .85fr); gap: 15px; margin-bottom: 17px; }
-    .panel { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); overflow: hidden; box-shadow: var(--shadow); animation: rise-in .55s .12s both; }
-    .panel-header { min-height: 67px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 19px; border-bottom: 1px solid var(--line-soft); }
-    .panel-title { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: -.01em; }
-    .panel-subtitle { margin-top: 4px; color: var(--quiet); font-size: 10px; }
-    .panel-tag { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; color: var(--muted); font-size: 10px; white-space: nowrap; }
-    .panel-tag .tiny-mark { background: var(--acid); }
-    .chart-area { height: 280px; padding: 18px 17px 12px; position: relative; }
-    .chart-foot { display: flex; justify-content: space-between; gap: 12px; padding: 0 19px 15px; color: var(--quiet); font-size: 10px; }
-    .chart-foot strong { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
-    .right-stack { display: grid; grid-template-rows: auto 1fr; gap: 15px; min-width: 0; }
-    .distribution { padding: 19px; }
-    .distribution-total { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 17px; }
-    .distribution-total strong { font-size: 27px; letter-spacing: -.05em; font-variant-numeric: tabular-nums; }
-    .distribution-total span { color: var(--quiet); font-size: 10px; }
-    .segmented-bar { display: flex; height: 8px; gap: 3px; overflow: hidden; border-radius: 99px; background: #2a2e26; }
-    .segment { width: 0; border-radius: 99px; transition: width .55s cubic-bezier(.2,.8,.2,1); }
-    .segment.secure-seg { background: var(--acid); }
-    .segment.insecure-seg { background: var(--amber); }
-    .segment.blocked-seg { background: var(--red); }
-    .legend-list { display: grid; gap: 12px; margin-top: 19px; }
-    .legend-row { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 11px; }
-    .legend-dot { width: 7px; height: 7px; border-radius: 2px; background: var(--legend); }
-    .legend-row strong { margin-left: auto; color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
-    .pipeline { padding: 18px 19px; }
-    .pipeline-steps { display: grid; gap: 0; margin-top: 14px; }
-    .pipeline-step { display: grid; grid-template-columns: 24px 1fr auto; align-items: center; gap: 10px; min-height: 44px; position: relative; }
-    .pipeline-step:not(:last-child)::after { content: ""; position: absolute; left: 11px; top: 32px; height: 22px; border-left: 1px dashed #48503c; }
-    .step-number { width: 23px; height: 23px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 7px; color: var(--acid); font-size: 10px; font-weight: 750; background: var(--panel-raised); }
-    .step-name { font-size: 11px; font-weight: 650; }
-    .step-detail { color: var(--quiet); font-size: 9px; margin-top: 1px; }
-    .step-port { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+  .certificate {
+    position: relative; padding: 22px 26px 24px; background: var(--sheet);
+    border: 1px solid var(--rule); border-radius: 4px;
+    box-shadow: inset 0 0 0 6px var(--sheet), inset 0 0 0 7px var(--rule);
+  }
+  .cert-head { display: flex; justify-content: flex-end; min-height: 62px; padding-top: 8px; }
+  .stamp {
+    display: inline-block; align-self: flex-start; padding: 5px 15px 4px;
+    border: 3px double var(--c, var(--ink-3)); border-radius: 4px; color: var(--c, var(--ink-3));
+    font: 800 20px var(--serif); letter-spacing: .14em; text-transform: uppercase;
+    transform: rotate(-6deg); opacity: .94;
+  }
+  .stamp.hit { animation: stamp-in .42s cubic-bezier(.2, 1.5, .4, 1); }
+  @keyframes stamp-in { from { transform: rotate(-6deg) scale(1.9); opacity: 0; } to { transform: rotate(-6deg) scale(1); opacity: .94; } }
+  .cert-domain { font-size: 25px; line-height: 1.2; overflow-wrap: anywhere; }
+  .cert-sub { margin: 4px 0 14px; color: var(--ink-3); font-size: 13px; }
+  .cert-why { margin: 0 0 18px; color: var(--ink-2); min-height: 4.6em; }
+  .cert-facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 18px; margin: 0; padding-top: 14px; border-top: 1px solid var(--rule); font-size: 13px; }
+  .cert-facts dt { color: var(--ink-3); }
+  .cert-facts dd { margin: 0; font-weight: 600; text-align: right; }
 
-    .events-panel { animation-delay: .18s; }
-    .event-header { display: flex; align-items: center; justify-content: space-between; gap: 15px; flex-wrap: wrap; padding: 17px 19px; border-bottom: 1px solid var(--line-soft); }
-    .event-head-left { display: flex; align-items: center; gap: 11px; }
-    .live-bars { display: flex; align-items: center; gap: 3px; height: 20px; padding: 0 7px; border: 1px solid var(--line); border-radius: 7px; }
-    .live-bars span { width: 3px; height: 7px; border-radius: 5px; background: var(--acid); animation: equalize .9s ease-in-out infinite alternate; }
-    .live-bars span:nth-child(2) { height: 13px; animation-delay: .2s; }
-    .live-bars span:nth-child(3) { height: 9px; animation-delay: .45s; }
-    .live-bars.paused span { animation-play-state: paused; opacity: .35; }
-    .event-controls { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
-    .search-box { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #131610; color: var(--quiet); }
-    .search-box svg { width: 14px; height: 14px; flex: 0 0 auto; }
-    .search-box input { width: 145px; min-width: 80px; border: 0; outline: none; background: transparent; color: var(--text); font-size: 11px; }
-    .search-box input::placeholder { color: var(--quiet); }
-    .control-btn { min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #20231d; color: var(--muted); cursor: pointer; font-size: 10px; font-weight: 650; white-space: nowrap; transition: color .18s ease, border-color .18s ease, background .18s ease, transform .18s ease; }
-    .control-btn:hover { color: var(--text); border-color: #505747; background: #282d23; }
-    .control-btn.primary { color: var(--acid); border-color: rgba(200, 241, 105, .3); background: rgba(200, 241, 105, .07); }
-    .control-btn:active { transform: scale(.97); }
-    .control-btn svg { width: 13px; height: 13px; }
-    .filter-row { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; padding: 12px 19px; border-bottom: 1px solid var(--line-soft); background: rgba(12, 14, 11, .22); }
-    .filter-label { margin-right: 5px; color: var(--quiet); font-size: 10px; }
-    .filter-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid transparent; border-radius: 7px; color: var(--muted); background: transparent; cursor: pointer; font-size: 10px; transition: all .18s ease; }
-    .filter-chip:hover { background: var(--panel-hover); color: var(--text); }
-    .filter-chip.active { border-color: #404838; background: #262d20; color: var(--acid); }
-    .filter-chip .chip-num { color: var(--quiet); font-size: 9px; }
-    .table-wrap { max-height: 425px; overflow: auto; scrollbar-color: #454b3f #171a15; scrollbar-width: thin; }
-    table { width: 100%; min-width: 820px; border-collapse: separate; border-spacing: 0; text-align: left; }
-    th { position: sticky; top: 0; z-index: 2; background: #191c17; color: var(--quiet); font-size: 9px; font-weight: 750; text-transform: uppercase; letter-spacing: .11em; }
-    th, td { padding: 13px 17px; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
-    td { color: #d9ddcf; font-size: 11px; font-variant-numeric: tabular-nums; }
-    tbody tr { background: rgba(255,255,255,0); transition: background .18s ease; }
-    tbody tr:hover { background: #20241c; }
-    tbody tr.new-event { animation: event-in .45s ease both; }
-    tbody tr.new-event td:first-child { box-shadow: inset 2px 0 var(--acid); }
-    .time-cell { color: var(--quiet); }
-    .domain-cell { color: var(--text); font-weight: 620; }
-    .record-type { display: inline-grid; place-items: center; min-width: 25px; padding: 3px 5px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); font-size: 9px; font-weight: 750; }
-    .decision { display: inline-flex; align-items: center; gap: 6px; font-size: 9px; font-weight: 800; letter-spacing: .035em; }
-    .decision::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-    .decision.SECURE { color: var(--acid); }
-    .decision.INSECURE { color: var(--amber); }
-    .decision.BOGUS, .decision.ERROR, .decision.BLOCKED_CD { color: var(--red); }
-    .latency-value { color: var(--text); }
-    .latency-track { display: inline-block; width: 47px; height: 3px; margin-left: 8px; vertical-align: middle; border-radius: 4px; background: #2e3329; overflow: hidden; }
-    .latency-fill { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--acid); animation: fill-in .6s ease both; }
-    .cpu-cell { color: var(--muted); }
-    .empty-state { padding: 43px 20px !important; text-align: center; color: var(--quiet); white-space: normal; }
-    .empty-state strong { display: block; color: var(--text); font-size: 12px; margin-bottom: 5px; }
-    .empty-state span { font-size: 11px; }
-    .event-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 19px; color: var(--quiet); font-size: 10px; }
-    .footer-status { display: flex; align-items: center; gap: 7px; }
-    .footer-status .tiny-mark { background: var(--acid); }
-    .footer-right { font-variant-numeric: tabular-nums; }
-    .bottom-note { display: flex; justify-content: space-between; align-items: center; gap: 15px; margin-top: 17px; padding: 0 2px; color: var(--quiet); font-size: 10px; }
-    .bottom-note strong { color: var(--muted); font-weight: 600; }
-    .toast { position: fixed; right: 22px; bottom: 22px; z-index: 50; max-width: min(360px, calc(100vw - 36px)); padding: 12px 15px; border: 1px solid #49513d; border-radius: 10px; background: #20251b; color: var(--text); box-shadow: var(--shadow); font-size: 12px; opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .2s ease, transform .2s ease; }
-    .toast.show { opacity: 1; transform: translateY(0); }
-    .mobile-brand { display: none; }
+  /* Path */
+  .path-title { font-size: 19px; }
+  .path-lede { margin: 4px 0 6px; color: var(--ink-2); font-size: 14px; max-width: 60ch; }
+  #pathSvg { width: 100%; height: auto; display: block; overflow: visible; }
+  .node rect { fill: var(--sheet); stroke: var(--rule); stroke-width: 1.5; transition: stroke .2s, stroke-width .2s; }
+  .node[data-flash] rect { stroke: var(--c); stroke-width: 3.5; }
+  .n-name { font: 700 14px var(--sans); fill: var(--ink); text-anchor: middle; }
+  .n-sub { font: 400 11.5px var(--sans); fill: var(--ink-3); text-anchor: middle; }
+  .n-count { font: 700 17px var(--serif); fill: var(--ink); text-anchor: middle; }
+  .n-cap { font: 400 11.5px var(--sans); fill: var(--ink-3); text-anchor: middle; }
+  .edge { stroke: var(--ink-3); stroke-width: 1.5; }
+  .arrowhead { fill: var(--ink-3); }
+  .edge-label { font: 400 11px var(--sans); fill: var(--ink-3); text-anchor: middle; }
+  .packet { fill: var(--c); }
 
-    @keyframes beacon { 0% { box-shadow: 0 0 0 0 rgba(200,241,105,.25); } 75%,100% { box-shadow: 0 0 0 6px rgba(200,241,105,0); } }
-    @keyframes rise-in { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes number-pop { 0% { transform: translateY(3px); opacity: .55; } 100% { transform: translateY(0); opacity: 1; } }
-    @keyframes event-in { from { opacity: 0; transform: translateY(-7px); background: rgba(200,241,105,.07); } to { opacity: 1; transform: translateY(0); background: transparent; } }
-    @keyframes equalize { from { transform: scaleY(.55); opacity: .6; } to { transform: scaleY(1.15); opacity: 1; } }
-    @keyframes fill-in { from { width: 0; } to { width: var(--fill-width); } }
+  /* Tally */
+  .tally-wrap { padding-block: 10px 34px; border-top: 1px solid var(--rule); }
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 26px 0 14px; }
+  .section-head h2 { font-size: 21px; }
+  .section-head p { margin: 0; color: var(--ink-3); font-size: 13px; }
+  .tally { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; border: 1px solid var(--rule); border-radius: 4px; background: var(--sheet); }
+  .tally li { padding: 16px 18px 16px; border-left: 1px solid var(--rule); border-top: 4px solid var(--c); min-width: 0; }
+  .tally li:first-child { border-left: 0; }
+  .t-name { font: 700 15px var(--serif); color: var(--c); }
+  .t-count { font: 700 34px/1.1 var(--serif); margin: 6px 0 2px; color: var(--ink); }
+  .t-share { font-size: 12px; color: var(--ink-3); }
+  .t-rule { margin: 10px 0 0; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+  .t-bar { height: 4px; margin-top: 10px; background: var(--rule); border-radius: 2px; overflow: hidden; }
+  .t-bar span { display: block; height: 100%; width: 0; background: var(--c); transition: width .4s ease; }
 
-    @media (max-width: 1180px) {
-      .sidebar { width: 205px; }
-      .main-shell { margin-left: 205px; }
-      .content-grid { grid-template-columns: minmax(0, 1.3fr) minmax(250px, .9fr); }
-      .metrics { gap: 10px; }
-      .metric-card { padding: 15px; }
-    }
-    @media (max-width: 980px) {
-      .sidebar { width: 66px; padding: 20px 9px 15px; align-items: center; }
-      .brand { padding: 0 0 28px; }
-      .brand-copy, .nav-label, .nav-text, .nav-count, .pipeline-card, .side-foot { display: none; }
-      .nav { width: 100%; }
-      .nav a { justify-content: center; padding: 12px 0; }
-      .nav svg { width: 19px; height: 19px; }
-      .main-shell { margin-left: 66px; }
-      .content-grid { grid-template-columns: 1fr; }
-      .right-stack { grid-template-columns: 1fr 1fr; grid-template-rows: auto; }
-      .chart-area { height: 265px; }
-    }
-    @media (max-width: 650px) {
-      .sidebar { display: none; }
-      .main-shell { margin-left: 0; }
-      .topbar { min-height: 64px; padding: 13px 16px; }
-      .mobile-brand { display: flex; align-items: center; gap: 9px; font-weight: 800; letter-spacing: .12em; font-size: 12px; }
-      .mobile-brand .brand-mark { width: 29px; height: 29px; border-radius: 8px; }
-      .mobile-brand .brand-mark svg { width: 17px; height: 17px; }
-      .crumb { display: none; }
-      .top-right { gap: 0; }
-      .clock { display: none; }
-      .feed-state { font-size: 10px; }
-      .main-content { padding: 23px 14px 24px; }
-      .hero { display: block; margin-bottom: 18px; }
-      h1 { font-size: 33px; }
-      .hero-copy { font-size: 12px; }
-      .hero-meta { display: inline-flex; margin-top: 15px; }
-      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
-      .metric-card { padding: 13px; border-radius: 12px; }
-      .metric-label { font-size: 10px; }
-      .metric-icon { width: 26px; height: 26px; }
-      .metric-value { font-size: 29px; }
-      .metric-foot { font-size: 9px; }
-      .panel-header, .event-header { padding: 14px; }
-      .right-stack { grid-template-columns: 1fr; }
-      .chart-area { height: 230px; padding: 13px 10px 7px; }
-      .chart-foot { padding: 0 14px 13px; }
-      .event-header { align-items: flex-start; }
-      .event-controls { width: 100%; justify-content: flex-start; }
-      .search-box { flex: 1; }
-      .search-box input { width: 100%; }
-      .filter-row { padding: 11px 14px; }
-      .table-wrap { max-height: 390px; }
-      .bottom-note { align-items: flex-start; flex-direction: column; gap: 5px; }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
-    }
-  </style>
+  /* Performance */
+  .perf { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(250px, 1fr); gap: clamp(24px, 4vw, 48px); padding-bottom: 12px; }
+  .chart-box { position: relative; height: 270px; }
+  .chart-fallback { color: var(--ink-3); padding: 40px 0; }
+  .figures { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 0; }
+  .figures dt, .figures dd { margin: 0; padding: 11px 0; border-bottom: 1px solid var(--rule); }
+  .figures dt { color: var(--ink-2); }
+  .figures dd { font: 700 19px var(--serif); text-align: right; }
+  .note { margin: 12px 0 0; color: var(--ink-3); font-size: 12.5px; max-width: 62ch; }
+  .domains { width: 100%; border-collapse: collapse; margin-top: 22px; font-size: 13.5px; }
+  .domains th { text-align: left; font-weight: 600; color: var(--ink-3); padding: 6px 0; border-bottom: 1px solid var(--rule); font-size: 12px; }
+  .domains td { padding: 8px 0; border-bottom: 1px solid var(--rule); }
+  .domains th:nth-child(n+2), .domains td:nth-child(n+2) { text-align: right; }
+  .domains td:first-child { overflow-wrap: anywhere; font-weight: 600; padding-right: 10px; }
+
+  /* Ledger */
+  .ledger { padding-block: 8px 50px; border-top: 1px solid var(--rule); }
+  .tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { min-height: 34px; padding: 0 12px; border: 1px solid var(--rule); border-radius: 17px; background: transparent; cursor: pointer; font-size: 13px; color: var(--ink-2); }
+  .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--sheet); }
+  .chip small { margin-left: 5px; opacity: .75; font-size: 12px; }
+  .grow { flex: 1; }
+  .search { min-height: 36px; width: 190px; padding: 0 12px; border: 1px solid var(--rule); border-radius: 6px; background: var(--sheet); color: var(--ink); font: inherit; font-size: 13px; }
+  .search::placeholder { color: var(--ink-3); }
+  .table-scroll { max-height: 480px; overflow: auto; border: 1px solid var(--rule); border-radius: 4px; background: var(--sheet); }
+  .ledger-table { width: 100%; min-width: 760px; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
+  .ledger-table th { position: sticky; top: 0; background: var(--sheet); text-align: left; padding: 10px 14px; font-size: 12px; font-weight: 600; color: var(--ink-3); border-bottom: 1px solid var(--rule); }
+  .ledger-table td { padding: 10px 14px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+  .ledger-table tr:last-child td { border-bottom: 0; }
+  .ledger-table .num { text-align: right; }
+  .ledger-table td.dom { font-weight: 600; }
+  .ledger-table td.t { color: var(--ink-3); }
+  .verdict { display: inline-block; padding: 1px 9px 0; border: 1.5px solid var(--c); border-radius: 3px; color: var(--c); font: 700 11.5px var(--serif); letter-spacing: .09em; text-transform: uppercase; }
+  tr.fresh td { animation: fresh 1.4s ease-out; }
+  @keyframes fresh { from { background: color-mix(in srgb, var(--c) 16%, transparent); } to { background: transparent; } }
+  .empty td { padding: 34px 14px; text-align: center; color: var(--ink-3); white-space: normal; }
+  .ledger-foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 10px; color: var(--ink-3); font-size: 12.5px; }
+  .colophon { margin: 22px 0 0; color: var(--ink-3); font-size: 12.5px; }
+
+  .toast { position: fixed; right: 20px; bottom: 20px; z-index: 30; max-width: min(380px, calc(100vw - 40px)); padding: 12px 16px; background: var(--ink); color: var(--sheet); border-left: 5px solid var(--c, var(--ink-3)); border-radius: 4px; font-size: 13.5px; opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity .2s, transform .2s; }
+  .toast.show { opacity: 1; transform: none; }
+
+  @media (max-width: 980px) {
+    .hero { grid-template-columns: 1fr; }
+    .tally { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .tally li { border-left: 0; border-top-width: 4px; }
+    .tally li:nth-child(even) { border-left: 1px solid var(--rule); }
+    .perf { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 560px) {
+    .tally { grid-template-columns: 1fr; }
+    .tally li:nth-child(even) { border-left: 0; }
+    .search { width: 100%; }
+    .cert-why { min-height: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  }
+</style>
 </head>
 <body>
-  <div class="app-shell">
-    <aside class="sidebar" aria-label="Primary navigation">
-      <a class="brand" href="#overview" aria-label="AegisDNS home">
-        <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M12 2.7 20 5.8v5.5c0 5.1-3.5 8.4-8 10.2-4.5-1.8-8-5.1-8-10.2V5.8l8-3.1Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m8.1 12.1 2.5 2.5 5.4-5.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </span>
-        <span class="brand-copy"><span class="brand-name">AEGISDNS</span><span class="brand-sub">NETWORK DEFENCE</span></span>
-      </a>
+<p id="demoBanner" class="banner" hidden>Demo data. Nothing on this page came from your gateway.</p>
 
-      <div class="nav-label">Workspace</div>
-      <nav class="nav">
-        <a class="active" href="#overview" data-nav="overview" title="Overview">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="4" rx="1.2"/><rect x="13.5" y="10.5" width="7" height="10" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/></svg>
-          <span class="nav-text">Overview</span>
-        </a>
-        <a href="#latency" data-nav="latency" title="Performance">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 17.5h3.5l3-8 4.1 10 3.2-6H21" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 21h18" stroke-linecap="round"/></svg>
-          <span class="nav-text">Performance</span>
-        </a>
-        <a href="#events" data-nav="events" title="Event stream">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4.5h14a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z"/><path d="M7 8h4M7 12h10M7 16h7" stroke-linecap="round"/></svg>
-          <span class="nav-text">Event stream</span><span id="navEventCount" class="nav-count">0</span>
-        </a>
-      </nav>
-
-      <div class="nav-label" style="margin-top:29px">Infrastructure</div>
-      <div class="nav">
-        <a href="#pipeline" data-nav="pipeline" title="Request path">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="7" height="6" rx="1.5"/><rect x="14" y="14" width="7" height="6" rx="1.5"/><path d="M10 7h3a2 2 0 0 1 2 2v3a2 2 0 0 0 2 2h1" stroke-linecap="round"/></svg>
-          <span class="nav-text">Request path</span>
-        </a>
-      </div>
-
-      <div class="side-spacer"></div>
-      <div class="pipeline-card">
-        <div class="pipeline-heading"><span class="mini-pulse"></span> LAB ENVIRONMENT</div>
-        <p>Controlled DNSSEC zone<br>Local resolver · gateway telemetry<br>No historical database configured</p>
-      </div>
-      <div class="side-foot"><span>AEGIS / LAB</span><span>v1.0</span></div>
-    </aside>
-
-    <div class="main-shell">
-      <header class="topbar">
-        <div class="crumb">SECURITY OPERATIONS <span style="color:var(--line);padding:0 8px">/</span> <strong>Overview</strong></div>
-        <a class="mobile-brand" href="#overview"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2.7 20 5.8v5.5c0 5.1-3.5 8.4-8 10.2-4.5-1.8-8-5.1-8-10.2V5.8l8-3.1Z" stroke="currentColor" stroke-width="1.8"/><path d="m8.1 12.1 2.5 2.5 5.4-5.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span> AEGISDNS</a>
-        <div class="top-right">
-          <div class="feed-state" role="status" aria-live="polite"><span id="connectionDot" class="state-dot"></span><span id="connectionText">Connecting to telemetry</span></div>
-          <div class="clock" id="clock">--:--:--</div>
-        </div>
-      </header>
-
-      <main class="main-content" id="overview">
-        <section class="hero">
-          <div>
-            <div class="eyebrow"><span class="eyebrow-line"></span> DNS SECURITY TELEMETRY</div>
-            <h1>See the signal.<br><span class="accent">Stop the spoof.</span></h1>
-            <p class="hero-copy">A live view of gateway decisions, DNSSEC outcomes and query performance across your AegisDNS lab.</p>
-          </div>
-          <div class="hero-meta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg><span>SESSION METRICS</span><span style="color:var(--line)">/</span><span id="sessionDate">—</span></div>
-        </section>
-
-        <section class="metrics" aria-label="Session summary metrics">
-          <article class="metric-card" style="--metric-color:var(--text);--glow:rgba(240,242,233,.035)">
-            <div class="metric-top"><span class="metric-label">Queries observed</span><span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16M4 12h10M4 19h7" stroke-linecap="round"/><circle cx="18" cy="17" r="3"/><path d="m20.2 19.2 1.3 1.3" stroke-linecap="round"/></svg></span></div>
-            <div id="total" class="metric-value">0</div><div class="metric-foot"><span class="tiny-mark"></span> Since this page opened</div>
-          </article>
-          <article class="metric-card" style="--metric-color:var(--acid);--glow:rgba(200,241,105,.07)">
-            <div class="metric-top"><span class="metric-label">Authenticated</span><span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3 19 6v5c0 4.5-3 7.5-7 9.5C8 18.5 5 15.5 5 11V6l7-3Z"/><path d="m8.5 11.7 2.2 2.2 4.7-4.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
-            <div id="secure" class="metric-value" style="color:var(--acid)">0</div><div class="metric-foot"><span class="tiny-mark"></span> DNSSEC validated · AD=1</div>
-          </article>
-          <article class="metric-card" style="--metric-color:var(--amber);--glow:rgba(243,180,94,.07)">
-            <div class="metric-top"><span class="metric-label">Unsigned / insecure</span><span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v6m0 3h.01" stroke-linecap="round"/></svg></span></div>
-            <div id="insecure" class="metric-value" style="color:var(--amber)">0</div><div class="metric-foot"><span class="tiny-mark"></span> Not authenticated by DNSSEC</div>
-          </article>
-          <article class="metric-card" style="--metric-color:var(--red);--glow:rgba(255,112,95,.07)">
-            <div class="metric-top"><span class="metric-label">Rejected / errors</span><span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3 22 20H2L12 3Z" stroke-linejoin="round"/><path d="M12 9v5m0 3h.01" stroke-linecap="round"/></svg></span></div>
-            <div id="blocked" class="metric-value" style="color:var(--red)">0</div><div class="metric-foot"><span class="tiny-mark"></span> Bogus · policy block · error</div>
-          </article>
-        </section>
-
-        <section class="content-grid">
-          <article class="panel" id="latency">
-            <div class="panel-header">
-              <div><h2 class="panel-title">Query latency</h2><div class="panel-subtitle">Response time per observed DNS request</div></div>
-              <span class="panel-tag"><span class="tiny-mark"></span> ROLLING · 30 EVENTS</span>
-            </div>
-            <div class="chart-area"><canvas id="latencyChart" aria-label="Recent DNS query latency line chart" role="img"></canvas></div>
-            <div class="chart-foot"><span>Last <strong id="chartPointCount">0</strong> samples</span><span>Mean <strong id="avgLatency">—</strong></span><span>P95 <strong id="p95Latency">—</strong></span></div>
-          </article>
-
-          <div class="right-stack">
-            <article class="panel">
-              <div class="panel-header"><div><h2 class="panel-title">Outcome distribution</h2><div class="panel-subtitle">Current browser session</div></div><span class="panel-tag">LIVE</span></div>
-              <div class="distribution">
-                <div class="distribution-total"><strong id="distributionTotal">0</strong><span>events counted</span></div>
-                <div class="segmented-bar" aria-label="Distribution of DNS outcomes"><span id="secureSegment" class="segment secure-seg"></span><span id="insecureSegment" class="segment insecure-seg"></span><span id="blockedSegment" class="segment blocked-seg"></span></div>
-                <div class="legend-list">
-                  <div class="legend-row"><span class="legend-dot" style="--legend:var(--acid)"></span>Secure<strong id="securePercent">0%</strong></div>
-                  <div class="legend-row"><span class="legend-dot" style="--legend:var(--amber)"></span>Insecure<strong id="insecurePercent">0%</strong></div>
-                  <div class="legend-row"><span class="legend-dot" style="--legend:var(--red)"></span>Rejected / errors<strong id="blockedPercent">0%</strong></div>
-                </div>
-              </div>
-            </article>
-
-            <article class="panel" id="pipeline">
-              <div class="panel-header"><div><h2 class="panel-title">Request path</h2><div class="panel-subtitle">Configured AegisDNS flow</div></div><span class="panel-tag">LOCAL LAB</span></div>
-              <div class="pipeline"><div class="pipeline-steps">
-                <div class="pipeline-step"><span class="step-number">01</span><div><div class="step-name">IoT client</div><div class="step-detail">DNS query · TLS identity</div></div><span class="step-port">ESP32</span></div>
-                <div class="pipeline-step"><span class="step-number">02</span><div><div class="step-name">Aegis gateway</div><div class="step-detail">Policy · event telemetry</div></div><span class="step-port">:853</span></div>
-                <div class="pipeline-step"><span class="step-number">03</span><div><div class="step-name">Unbound resolver</div><div class="step-detail">DNSSEC validation</div></div><span class="step-port">:53</span></div>
-                <div class="pipeline-step"><span class="step-number">04</span><div><div class="step-name">Live console</div><div class="step-detail">Metrics via Socket.IO</div></div><span class="step-port">WS</span></div>
-              </div></div>
-            </article>
-          </div>
-        </section>
-
-        <section class="panel events-panel" id="events">
-          <div class="event-header">
-            <div class="event-head-left"><div class="live-bars" id="liveBars" aria-hidden="true"><span></span><span></span><span></span></div><div><h2 class="panel-title">Security event stream</h2><div class="panel-subtitle">Newest events first · live gateway feed</div></div></div>
-            <div class="event-controls">
-              <label class="search-box" aria-label="Search events"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5" stroke-linecap="round"/></svg><input id="searchInput" type="search" placeholder="Find a domain…" autocomplete="off"></label>
-              <button id="pauseButton" class="control-btn" type="button" title="Pause updating the visible dashboard"><svg id="pauseIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 5v14M16 5v14" stroke-linecap="round"/></svg><span id="pauseLabel">Pause feed</span></button>
-              <button id="exportButton" class="control-btn primary" type="button" title="Export current session events as CSV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 17v3h14v-3" stroke-linecap="round" stroke-linejoin="round"/></svg>Export CSV</button>
-            </div>
-          </div>
-          <div class="filter-row" role="group" aria-label="Filter events by security outcome">
-            <span class="filter-label">FILTER</span>
-            <button class="filter-chip active" data-filter="ALL" type="button">All events <span id="filterAllCount" class="chip-num">0</span></button>
-            <button class="filter-chip" data-filter="SECURE" type="button">Secure <span id="filterSecureCount" class="chip-num">0</span></button>
-            <button class="filter-chip" data-filter="INSECURE" type="button">Insecure <span id="filterInsecureCount" class="chip-num">0</span></button>
-            <button class="filter-chip" data-filter="BLOCKED" type="button">Blocked / error <span id="filterBlockedCount" class="chip-num">0</span></button>
-            <span style="flex:1"></span>
-            <button id="clearButton" class="control-btn" type="button" title="Clear the visible session event history">Clear log</button>
-          </div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>Time</th><th>Domain</th><th>Type</th><th>Decision</th><th>Latency</th><th>Gateway CPU</th></tr></thead>
-            <tbody id="eventsBody"><tr><td colspan="6" class="empty-state"><strong>Waiting for telemetry</strong><span>Run <code>py src/scripts/test_gateway.py</code> to send your first test queries.</span></td></tr></tbody>
-          </table></div>
-          <div class="event-footer"><div class="footer-status"><span class="tiny-mark"></span><span id="feedSummary">Listening for gateway events</span></div><div class="footer-right"><span id="visibleCount">0</span> shown <span style="padding:0 5px;color:var(--line)">/</span> <span id="storedCount">0</span> in session log</div></div>
-        </section>
-
-        <footer class="bottom-note"><span><strong>AEGISDNS</strong> · Authenticated Gateway-Assisted DNSSEC</span><span>Live metrics are session-only · no historical database configured</span></footer>
-      </main>
+<header class="bar">
+  <div class="wrap">
+    <div class="wordmark">
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M16 3 27 7v8c0 7-4.6 11.4-11 14C9.600 26.400 5 22 5 15V7l11-4Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m11 16 3.5 3.5L21.500 12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div><b>AegisDNS</b> <span>DNSSEC checks for small IoT devices</span></div>
+    </div>
+    <div class="bar-right">
+      <span id="link" class="link" role="status" aria-live="polite"><i></i><span id="linkText">Connecting to gateway feed</span></span>
+      <span class="elapsed" id="elapsed">Session 00:00:00</span>
+      <button id="pauseBtn" class="btn" type="button" aria-pressed="false">Pause updates</button>
     </div>
   </div>
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</header>
 
-  <script>
-    (() => {
-      'use strict';
-      const socket = io();
-      const MAX_POINTS = 30;
-      const MAX_HISTORY = 500;
-      const BLOCKED_STATUSES = new Set(['BOGUS', 'ERROR', 'BLOCKED_CD']);
-      const counts = { total: 0, secure: 0, insecure: 0, blocked: 0 };
-      const history = [];
-      const chartLabels = [];
-      const chartValues = [];
-      let activeFilter = 'ALL';
-      let searchTerm = '';
-      let paused = false;
-      let pending = [];
-      let toastTimer;
+<main class="wrap">
+  <section class="hero" aria-label="Latest lookup and its path">
+    <div>
+      <h1 class="page-title">Live DNS verdicts</h1>
+      <p class="page-lede">What the gateway decided for recent device lookups.</p>
+      <article class="certificate" id="certificate" data-v="error" aria-live="polite">
+        <div class="cert-head"><span class="stamp" id="stamp" hidden></span></div>
+        <h2 class="cert-domain" id="certDomain">No lookups yet</h2>
+        <p class="cert-sub" id="certSub">Run the ESP32 or <code>py scripts/test_gateway.py</code> to send one.</p>
+        <p class="cert-why" id="certWhy">The verdict for the newest lookup appears here, with the reason in plain words.</p>
+        <dl class="cert-facts">
+          <dt>Answered in</dt><dd id="factLatency">–</dd>
+          <dt>Gateway CPU</dt><dd id="factCpu">–</dd>
+          <dt>Received</dt><dd id="factTime">–</dd>
+          <dt id="factClientLabel" hidden>Device</dt><dd id="factClient" hidden>–</dd>
+        </dl>
+      </article>
+    </div>
 
-      const byId = id => document.getElementById(id);
-      const chartCanvas = byId('latencyChart');
-      const chartCtx = chartCanvas.getContext('2d');
-      const gradient = chartCtx.createLinearGradient(0, 0, 0, 270);
-      gradient.addColorStop(0, 'rgba(200, 241, 105, .20)');
-      gradient.addColorStop(1, 'rgba(200, 241, 105, .005)');
+    <div>
+      <h2 class="path-title">Where each lookup ends</h2>
+      <p class="path-lede">A lookup stops at the first check it fails. The counts show how many ended at each stop.</p>
+      <svg id="pathSvg" viewBox="0 0 830 150" role="img" aria-label="Path from device to gateway to resolver to signed zone, with counts of lookups stopped at each step">
+        <g id="edges">
+          <line class="edge" x1="160" y1="60" x2="226" y2="60"/><path class="arrowhead" d="M232 60 224 56v8z"/><text class="edge-label" x="196" y="48">TLS 853</text>
+          <line class="edge" x1="380" y1="60" x2="446" y2="60"/><path class="arrowhead" d="M452 60 444 56v8z"/><text class="edge-label" x="416" y="48">DNS</text>
+          <line class="edge" x1="600" y1="60" x2="666" y2="60"/><path class="arrowhead" d="M672 60 664 56v8z"/><text class="edge-label" x="636" y="48">DNS</text>
+        </g>
+        <g class="node" id="node0"><rect x="10" y="28" width="150" height="64" rx="6"/><text class="n-name" x="85" y="55">Device</text><text class="n-sub" x="85" y="74">ESP32, client cert</text><text class="n-count" id="c0" x="85" y="118">0</text><text class="n-cap" id="k0" x="85" y="136">sent</text></g>
+        <g class="node" id="node1"><rect x="230" y="28" width="150" height="64" rx="6"/><text class="n-name" x="305" y="55">Gateway</text><text class="n-sub" x="305" y="74">identity, CD flag</text><text class="n-count" id="c1" x="305" y="118">0</text><text class="n-cap" id="k1" x="305" y="136">blocked</text></g>
+        <g class="node" id="node2"><rect x="450" y="28" width="150" height="64" rx="6"/><text class="n-name" x="525" y="55">Resolver</text><text class="n-sub" x="525" y="74">DNSSEC validation</text><text class="n-count" id="c2" x="525" y="118">0</text><text class="n-cap" id="k2" x="525" y="136">failed</text></g>
+        <g class="node" id="node3"><rect x="670" y="28" width="150" height="64" rx="6"/><text class="n-name" x="745" y="55">Zone</text><text class="n-sub" x="745" y="74">aegis.test</text><text class="n-count" id="c3" x="745" y="118">0</text><text class="n-cap" id="k3" x="745" y="136">answered</text></g>
+        <g id="packets"></g>
+      </svg>
+      <p class="note">“Failed” at the resolver counts failed signatures and errors together, because the gateway cannot always tell them apart.</p>
+    </div>
+  </section>
 
-      const chart = new Chart(chartCanvas, {
-        type: 'line',
-        data: { labels: chartLabels, datasets: [{
-          label: 'Latency', data: chartValues, borderColor: '#c8f169', backgroundColor: gradient,
-          fill: true, borderWidth: 2, tension: .34, pointRadius: 2.5, pointHoverRadius: 5,
-          pointBackgroundColor: '#c8f169', pointBorderColor: '#181b16', pointBorderWidth: 2,
-          cubicInterpolationMode: 'monotone'
-        }] },
-        options: {
-          responsive: true, maintainAspectRatio: false, animation: { duration: 240 }, interaction: { intersect: false, mode: 'index' },
-          plugins: {
-            legend: { display: false },
-            tooltip: { backgroundColor: '#22271e', titleColor: '#f0f2e9', bodyColor: '#c8f169', borderColor: '#454d3b', borderWidth: 1, padding: 11, displayColors: false, callbacks: { label: item => ` ${Number(item.raw).toFixed(2)} ms` } }
-          },
-          scales: {
-            x: { border: { display: false }, ticks: { color: '#737b6a', maxTicksLimit: 6, maxRotation: 0, font: { size: 10 } }, grid: { color: 'rgba(65, 73, 56, .38)', drawTicks: false } },
-            y: { beginAtZero: true, border: { display: false, dash: [3, 4] }, ticks: { color: '#737b6a', maxTicksLimit: 5, padding: 8, font: { size: 10 } }, grid: { color: 'rgba(65, 73, 56, .38)', drawTicks: false }, title: { display: true, text: 'MILLISECONDS', color: '#737b6a', font: { size: 9, weight: 'bold' } } }
-          }
+  <section class="tally-wrap" aria-labelledby="tallyTitle">
+    <div class="section-head"><h2 id="tallyTitle">Recent outcomes</h2><p id="tallyTotal">0 lookups</p></div>
+    <ul class="tally" id="tally"></ul>
+  </section>
+
+  <section aria-labelledby="perfTitle" style="border-top:1px solid var(--rule)">
+    <div class="section-head"><h2 id="perfTitle">Response time</h2><p id="perfSub">Latest 60 lookups, coloured by outcome</p></div>
+    <div class="perf">
+      <div>
+        <div class="chart-box"><canvas id="latencyChart" role="img" aria-label="Line chart of recent gateway response times in milliseconds"></canvas></div>
+        <p id="chartFallback" class="chart-fallback" hidden>The chart library did not load. Check that /vendor/chart.umd.js is served by the dashboard.</p>
+        <p class="note">Measured inside the gateway, from receiving a query to sending the answer. The ESP32 serial log shows the device’s own round-trip time, which also includes the network and the TLS handshake.</p>
+      </div>
+      <div>
+        <dl class="figures">
+          <dt>Median</dt><dd id="fMedian">–</dd>
+          <dt>95th percentile</dt><dd id="fP95">–</dd>
+          <dt>Slowest</dt><dd id="fMax">–</dd>
+          <dt>Mean</dt><dd id="fMean">–</dd>
+          <dt>Gateway CPU, latest</dt><dd id="fCpu">–</dd>
+        </dl>
+        <table class="domains" aria-label="Lookups by domain">
+          <thead><tr><th>Domain</th><th>Lookups</th><th>Latest</th><th>Median</th></tr></thead>
+          <tbody id="domainBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="ledger" aria-labelledby="ledgerTitle" style="margin-top:34px">
+    <div class="section-head"><h2 id="ledgerTitle">Ledger</h2><p>Newest first. Recent events are kept by the dashboard while it runs.</p></div>
+    <div class="tools">
+      <div class="chips" role="group" aria-label="Filter by outcome" id="chips"></div>
+      <span class="grow"></span>
+      <input id="search" class="search" type="search" placeholder="Search domain or client" aria-label="Search the ledger" autocomplete="off">
+      <button id="csvBtn" class="btn" type="button">Download CSV</button>
+      <button id="jsonBtn" class="btn" type="button">Download JSONL</button>
+      <button id="resetBtn" class="btn quiet" type="button">Clear view</button>
+    </div>
+    <div class="table-scroll">
+      <table class="ledger-table">
+        <thead><tr><th>Time</th><th>Domain</th><th>Type</th><th>Verdict</th><th class="num">Response</th><th class="num">CPU</th><th>Device</th></tr></thead>
+        <tbody id="ledgerBody"></tbody>
+      </table>
+    </div>
+    <div class="ledger-foot"><span id="ledgerShown">0 shown</span><span>Clears this view only; the dashboard keeps up to 2,000 recent events.</span></div>
+  </section>
+</main>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const make = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+
+  const VERDICTS = {
+    SECURE:     { v: 'verified', name: 'Verified',  stamp: 'Verified',  rule: 'The resolver validated the signatures and set AD=1.',
+                  why: 'The resolver checked the DNSSEC signatures and they are valid, so this answer is authentic.', stop: 3 },
+    INSECURE:   { v: 'unsigned', name: 'Unsigned',  stamp: 'Unsigned',  rule: 'An answer came back, but the name is not signed (AD=0).',
+                  why: 'This name is not DNSSEC-signed. The answer arrived, but nothing proves it is genuine.', stop: 3 },
+    BOGUS:      { v: 'failed',   name: 'Failed',    stamp: 'Failed',    rule: 'The resolver returned SERVFAIL. The gateway sent no answer data.',
+                  why: 'Signature checking failed, so the gateway withheld the answer. This is what a forged or broken record looks like.', stop: 2 },
+    BLOCKED_CD: { v: 'blocked',  name: 'Blocked',   stamp: 'Blocked',   rule: 'The device set CD=1 to skip validation. The gateway refused.',
+                  why: 'The device asked the resolver to skip DNSSEC checking (CD=1). The gateway refuses this and returns REFUSED.', stop: 1 },
+    ERROR:      { v: 'error',    name: 'Error',     stamp: 'Error',     rule: 'Timeout, malformed query or unsupported request.',
+                  why: 'The gateway or resolver could not complete this lookup. It is not a validation failure.', stop: 2 }
+  };
+  const ORDER = ['SECURE', 'INSECURE', 'BOGUS', 'BLOCKED_CD', 'ERROR'];
+  const FILTERS = [
+    { key: 'ALL',      label: 'All',      test: () => true },
+    { key: 'VERIFIED', label: 'Verified', test: e => e.status === 'SECURE' },
+    { key: 'UNSIGNED', label: 'Unsigned', test: e => e.status === 'INSECURE' },
+    { key: 'PROBLEM',  label: 'Failed or error', test: e => e.status === 'BOGUS' || e.status === 'ERROR' },
+    { key: 'BLOCKED',  label: 'Blocked',  test: e => e.status === 'BLOCKED_CD' }
+  ];
+  const MAX_EVENTS = 2000, CHART_POINTS = 60, MAX_ROWS = 200;
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const demo = new URLSearchParams(location.search).has('demo');
+
+  const state = { events: [], counts: {}, domains: new Map(), paused: false, pending: [], filter: 'ALL', search: '', start: Date.now(), seq: 0, lastToast: 0, metricIds: new Set() };
+  ORDER.forEach(s => { state.counts[s] = 0; });
+
+  /* ---------- helpers ---------- */
+  const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+  const pct = (arr, p) => { if (!arr.length) return null; const s = arr.slice().sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.max(0, Math.ceil(s.length * p) - 1))]; };
+  const fmtMs = v => v == null ? '–' : `${v < 10 ? v.toFixed(2) : v < 100 ? v.toFixed(1) : Math.round(v)} ms`;
+  const fmtTime = iso => new Date(iso).toLocaleTimeString([], { hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const verdictOf = e => VERDICTS[e.status];
+
+  function normalize(raw) {
+    const s = typeof raw.status === 'string' ? raw.status.toUpperCase() : 'ERROR';
+    const q = typeof raw.query === 'string' ? raw.query.slice(0, 253) : 'unknown';
+    return {
+      id: ++state.seq,
+      ts: typeof raw.timestamp === 'string' && !Number.isNaN(Date.parse(raw.timestamp)) ? raw.timestamp : new Date().toISOString(),
+      queryRaw: q, query: q.replace(/\.$/, '') || q,
+      type: typeof raw.type === 'string' ? raw.type.slice(0, 16) : 'UNKNOWN',
+      statusRaw: s, status: VERDICTS[s] ? s : 'ERROR',
+      latency: Math.max(0, num(raw.latency_ms)),
+      cpu: Math.min(100, Math.max(0, num(raw.cpu_percent))),
+      client: typeof raw.client === 'string' ? raw.client.slice(0, 64) : ''
+    };
+  }
+
+  /* ---------- connection ---------- */
+  function setLink(kind, text) {
+    $('link').className = `link ${kind}`;
+    $('linkText').textContent = text;
+  }
+  let socket = null;
+  if (demo) {
+    $('demoBanner').hidden = false;
+    setLink('on', 'Demo mode');
+  } else if (typeof io === 'undefined') {
+    setLink('off', 'Live feed unavailable');
+  } else {
+    socket = io();
+    let syncGeneration = 0, syncing = false, liveBuffer = [];
+    socket.on('connect', async () => {
+      const generation = ++syncGeneration;
+      syncing = true;
+      liveBuffer = [];
+      setLink('on', state.paused ? 'Paused' : 'Loading gateway events');
+      try {
+        const response = await fetch('/api/metrics');
+        if (!response.ok) throw new Error(`Metrics history returned HTTP ${response.status}`);
+        const data = await response.json();
+        if (!Array.isArray(data.metrics)) throw new Error('Metrics history response was invalid');
+        if (generation !== syncGeneration || !socket.connected) return;
+        const backlog = data.metrics.concat(liveBuffer);
+        if (state.paused) backlog.forEach(receive);
+        else {
+          backlog.forEach(raw => ingest(raw, false));
+          renderCurrentState();
         }
-      });
+        liveBuffer = [];
+        syncing = false;
+        setLink('on', state.paused ? 'Paused' : 'Receiving gateway events');
+      } catch (error) {
+        if (generation !== syncGeneration || !socket.connected) return;
+        console.error('Could not load gateway event history:', error);
+        liveBuffer.forEach(receive);
+        liveBuffer = [];
+        syncing = false;
+        setLink('on', 'History unavailable; live feed active');
+      }
+    });
+    socket.on('disconnect', () => {
+      syncing = false;
+      liveBuffer = [];
+      setLink('off', 'Feed lost, retrying');
+    });
+    socket.on('connect_error', () => setLink('off', 'Feed unreachable, retrying'));
+    socket.on('dns_metric', m => {
+      if (!m || typeof m !== 'object') return;
+      if (syncing) liveBuffer.push(m);
+      else receive(m);
+    });
+  }
 
-      function formatTime(value) {
-        const date = new Date(value);
-        return Number.isNaN(date.getTime()) ? new Date().toLocaleTimeString() : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      }
-      function formatClock() { byId('clock').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
-      function numeric(value) { const n = Number(value); return Number.isFinite(n) ? n : 0; }
-      function isBlocked(status) { return BLOCKED_STATUSES.has(status); }
-      function toast(message) {
-        byId('toast').textContent = message;
-        byId('toast').classList.add('show');
-        clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => byId('toast').classList.remove('show'), 2500);
-      }
-      function animateCard(el) {
-        const card = el.closest('.metric-card');
-        if (!card) return;
-        card.classList.remove('flash');
-        void card.offsetWidth;
-        card.classList.add('flash');
-      }
+  function receive(raw) {
+    if (state.paused) {
+      state.pending.push(raw);
+      if (state.pending.length > 1000) state.pending.shift();
+      updatePauseLabel();
+      return;
+    }
+    ingest(raw);
+  }
 
-      function updateCounters() {
-        const map = [['total', counts.total], ['secure', counts.secure], ['insecure', counts.insecure], ['blocked', counts.blocked]];
-        map.forEach(([id, value]) => { byId(id).textContent = value.toLocaleString(); });
-        byId('distributionTotal').textContent = counts.total.toLocaleString();
-        byId('navEventCount').textContent = counts.total > 999 ? '999+' : String(counts.total);
-        const ratio = value => counts.total ? (value / counts.total * 100) : 0;
-        const secureP = ratio(counts.secure), insecureP = ratio(counts.insecure), blockedP = ratio(counts.blocked);
-        byId('securePercent').textContent = `${Math.round(secureP)}%`;
-        byId('insecurePercent').textContent = `${Math.round(insecureP)}%`;
-        byId('blockedPercent').textContent = `${Math.round(blockedP)}%`;
-        byId('secureSegment').style.width = `${secureP}%`;
-        byId('insecureSegment').style.width = `${insecureP}%`;
-        byId('blockedSegment').style.width = `${blockedP}%`;
-        byId('filterAllCount').textContent = String(history.length);
-        byId('filterSecureCount').textContent = String(history.filter(m => m.status === 'SECURE').length);
-        byId('filterInsecureCount').textContent = String(history.filter(m => m.status === 'INSECURE').length);
-        byId('filterBlockedCount').textContent = String(history.filter(m => isBlocked(m.status)).length);
+  /* ---------- state updates ---------- */
+  function ingest(raw, render = true) {
+    if (typeof raw.id === 'string') {
+      if (state.metricIds.has(raw.id)) return;
+      state.metricIds.add(raw.id);
+      if (state.metricIds.size > 4000) {
+        state.metricIds.delete(state.metricIds.values().next().value);
       }
+    }
+    const e = normalize(raw);
+    state.events.unshift(e);
+    if (state.events.length > MAX_EVENTS) state.events.length = MAX_EVENTS;
+    state.counts[e.status]++;
+    let d = state.domains.get(e.query);
+    if (!d) { d = { n: 0, lat: [], last: e.status }; state.domains.set(e.query, d); }
+    d.n++; d.last = e.status; d.lat.push(e.latency); if (d.lat.length > 300) d.lat.shift();
 
-      function updateLatency() {
-        const recent = chartValues.slice();
-        byId('chartPointCount').textContent = String(recent.length);
-        if (!recent.length) {
-          byId('avgLatency').textContent = '—';
-          byId('p95Latency').textContent = '—';
-          return;
+    if (!render) return;
+    renderCurrentState(e);
+    trace(e);
+    alertIfNeeded(e);
+  }
+
+  function renderCurrentState(latest = state.events[0]) {
+    if (latest) renderCertificate(latest);
+    renderTally();
+    renderPathCounts();
+    renderFigures();
+    renderDomains();
+    updateChart();
+    renderLedger(latest && latest.id);
+  }
+
+  /* ---------- certificate ---------- */
+  function renderCertificate(e) {
+    const v = verdictOf(e);
+    $('certificate').dataset.v = v.v;
+    const stamp = $('stamp');
+    stamp.hidden = false; stamp.textContent = v.stamp;
+    stamp.classList.remove('hit'); void stamp.offsetWidth; stamp.classList.add('hit');
+    $('certDomain').textContent = e.query;
+    $('certSub').textContent = `${e.type} record lookup`;
+    $('certWhy').textContent = v.why;
+    $('factLatency').textContent = fmtMs(e.latency);
+    $('factCpu').textContent = `${e.cpu.toFixed(1)}%`;
+    $('factTime').textContent = fmtTime(e.ts);
+    const hasClient = !!e.client;
+    $('factClientLabel').hidden = !hasClient; $('factClient').hidden = !hasClient;
+    if (hasClient) $('factClient').textContent = e.client;
+  }
+
+  /* ---------- tally ---------- */
+  function buildTally() {
+    const ul = $('tally');
+    ORDER.forEach(s => {
+      const v = VERDICTS[s];
+      const li = make('li'); li.dataset.v = v.v; li.dataset.s = s;
+      li.append(make('div', 't-name', v.name), make('div', 't-count', '0'), make('div', 't-share', '0% of lookups'), make('p', 't-rule', v.rule));
+      const bar = make('div', 't-bar'); bar.append(make('span')); li.append(bar);
+      ul.append(li);
+    });
+  }
+  function renderTally() {
+    const total = state.events.length ? Object.values(state.counts).reduce((a, b) => a + b, 0) : 0;
+    $('tallyTotal').textContent = `${total.toLocaleString()} lookup${total === 1 ? '' : 's'}`;
+    document.querySelectorAll('#tally li').forEach(li => {
+      const c = state.counts[li.dataset.s];
+      const share = total ? c / total * 100 : 0;
+      li.querySelector('.t-count').textContent = c.toLocaleString();
+      li.querySelector('.t-share').textContent = `${share < 10 && share > 0 ? share.toFixed(1) : Math.round(share)}% of lookups`;
+      li.querySelector('.t-bar span').style.width = `${share}%`;
+    });
+  }
+
+  /* ---------- path ---------- */
+  function renderPathCounts() {
+    const c = state.counts;
+    const total = ORDER.reduce((a, s) => a + c[s], 0);
+    $('c0').textContent = total.toLocaleString();
+    $('c1').textContent = c.BLOCKED_CD.toLocaleString();
+    $('c2').textContent = (c.BOGUS + c.ERROR).toLocaleString();
+    $('c3').textContent = (c.SECURE + c.INSECURE).toLocaleString();
+  }
+  const NODE_RIGHT_EDGE = 160, NODE_LEFT = [10, 230, 450, 670];
+  let flashTimers = [];
+  function flash(index, v) {
+    const g = $(`node${index}`);
+    g.dataset.v = v.v; g.setAttribute('data-flash', '');
+    clearTimeout(flashTimers[index]);
+    flashTimers[index] = setTimeout(() => g.removeAttribute('data-flash'), 1100);
+  }
+  function trace(e) {
+    const v = verdictOf(e);
+    const stop = v.stop;
+    if (reduceMotion || !document.hidden === false) { flash(stop, v); return; }
+    const layer = $('packets');
+    if (layer.childElementCount > 14) { flash(stop, v); return; }
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.setAttribute('class', 'packet'); dot.setAttribute('r', '6'); dot.setAttribute('cx', NODE_RIGHT_EDGE); dot.setAttribute('cy', '60');
+    dot.dataset.v = v.v;
+    layer.append(dot);
+    const dx = NODE_LEFT[stop] - NODE_RIGHT_EDGE;
+    const out = dot.animate([{ transform: 'translateX(0)' }, { transform: `translateX(${dx}px)` }], { duration: 240 * stop + 120, easing: 'ease-in-out', fill: 'forwards' });
+    out.finished.then(() => {
+      flash(stop, v);
+      if (stop === 3) {
+        return dot.animate([{ transform: `translateX(${dx}px)` }, { transform: 'translateX(0)' }], { duration: 240 * stop, easing: 'ease-in-out', fill: 'forwards' }).finished;
+      }
+      return dot.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 500, fill: 'forwards' }).finished;
+    }).catch(() => {}).finally(() => dot.remove());
+  }
+
+  /* ---------- figures and domains ---------- */
+  function renderFigures() {
+    const lat = state.events.map(e => e.latency);
+    const mean = lat.length ? lat.reduce((a, b) => a + b, 0) / lat.length : null;
+    $('fMedian').textContent = fmtMs(pct(lat, .5));
+    $('fP95').textContent = fmtMs(pct(lat, .95));
+    $('fMax').textContent = fmtMs(lat.length ? Math.max(...lat) : null);
+    $('fMean').textContent = fmtMs(mean);
+    $('fCpu').textContent = state.events.length ? `${state.events[0].cpu.toFixed(1)}%` : '–';
+    $('perfSub').textContent = `Latest ${Math.min(CHART_POINTS, state.events.length) || CHART_POINTS} lookups, coloured by outcome. Figures cover ${state.events.length} lookups.`;
+  }
+  function renderDomains() {
+    const body = $('domainBody'); body.replaceChildren();
+    [...state.domains.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, 8).forEach(([name, d]) => {
+      const tr = make('tr');
+      const last = make('span', 'verdict', VERDICTS[d.last].name); last.dataset.v = VERDICTS[d.last].v;
+      const tdLast = make('td'); tdLast.append(last);
+      tr.append(make('td', '', name), make('td', '', d.n.toLocaleString()), tdLast, make('td', '', fmtMs(pct(d.lat, .5))));
+      body.append(tr);
+    });
+  }
+
+  /* ---------- chart ---------- */
+  let chart = null, chartSlice = [];
+  function buildChart() {
+    if (typeof Chart === 'undefined') { $('chartFallback').hidden = false; $('latencyChart').hidden = true; return; }
+    if (chart) chart.destroy();
+    const grid = cssVar('--rule'), tick = cssVar('--ink-3'), line = cssVar('--ink-3'), sheet = cssVar('--sheet');
+    chart = new Chart($('latencyChart'), {
+      type: 'line',
+      data: { labels: [], datasets: [{ data: [], borderColor: line, borderWidth: 1.5, tension: .25, fill: false, pointRadius: 4.5, pointHoverRadius: 6, pointBorderWidth: 2, pointBorderColor: sheet, pointBackgroundColor: [] }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: { duration: reduceMotion ? 0 : 220 },
+        interaction: { mode: 'nearest', intersect: false },
+        plugins: { legend: { display: false }, tooltip: { displayColors: false, callbacks: {
+          title: items => { const e = chartSlice[items[0].dataIndex]; return e ? e.query : ''; },
+          label: item => { const e = chartSlice[item.dataIndex]; return e ? `${fmtMs(e.latency)}, ${verdictOf(e).name}` : ''; } } } },
+        scales: {
+          x: { grid: { display: false }, border: { color: grid }, ticks: { color: tick, maxTicksLimit: 6, maxRotation: 0, font: { size: 11 } } },
+          y: { beginAtZero: true, grid: { color: grid }, border: { display: false }, ticks: { color: tick, maxTicksLimit: 5, font: { size: 11 } }, title: { display: true, text: 'milliseconds', color: tick, font: { size: 11 } } }
         }
-        const avg = recent.reduce((sum, n) => sum + n, 0) / recent.length;
-        const sorted = recent.slice().sort((a, b) => a - b);
-        const p95 = sorted[Math.max(0, Math.ceil(sorted.length * .95) - 1)];
-        byId('avgLatency').textContent = `${avg.toFixed(2)} ms`;
-        byId('p95Latency').textContent = `${p95.toFixed(2)} ms`;
       }
+    });
+    updateChart();
+  }
+  function updateChart() {
+    if (!chart) return;
+    chartSlice = state.events.slice(0, CHART_POINTS).reverse();
+    const ds = chart.data.datasets[0];
+    chart.data.labels = chartSlice.map(e => fmtTime(e.ts));
+    ds.data = chartSlice.map(e => e.latency);
+    ds.pointBackgroundColor = chartSlice.map(e => cssVar(`--${verdictOf(e).v}`));
+    chart.update('none');
+  }
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', buildChart);
 
-      function emptyRow(title, detail) {
-        const row = document.createElement('tr');
-        const cell = document.createElement('td');
-        cell.colSpan = 6;
-        cell.className = 'empty-state';
-        const strong = document.createElement('strong'); strong.textContent = title;
-        const span = document.createElement('span'); span.textContent = detail;
-        cell.append(strong, span); row.appendChild(cell); return row;
-      }
+  /* ---------- ledger ---------- */
+  function buildChips() {
+    const wrap = $('chips');
+    FILTERS.forEach(f => {
+      const b = make('button', 'chip', f.label); b.type = 'button'; b.dataset.key = f.key;
+      b.setAttribute('aria-pressed', String(f.key === state.filter));
+      b.append(make('small', '', '0'));
+      b.addEventListener('click', () => { state.filter = f.key; renderLedger(); });
+      wrap.append(b);
+    });
+  }
+  function matches(e) {
+    const f = FILTERS.find(x => x.key === state.filter);
+    if (!f.test(e)) return false;
+    if (!state.search) return true;
+    return `${e.query} ${e.client} ${e.type} ${verdictOf(e).name}`.toLowerCase().includes(state.search);
+  }
+  function renderLedger(freshId) {
+    document.querySelectorAll('#chips .chip').forEach(b => {
+      const f = FILTERS.find(x => x.key === b.dataset.key);
+      b.setAttribute('aria-pressed', String(f.key === state.filter));
+      b.querySelector('small').textContent = String(state.events.filter(f.test).length);
+    });
+    const body = $('ledgerBody'); body.replaceChildren();
+    const rows = state.events.filter(matches);
+    if (!rows.length) {
+      const tr = make('tr', 'empty'); const td = make('td', '', state.events.length ? 'No lookups match this filter.' : 'Waiting for the first lookup from the gateway.'); td.colSpan = 7; tr.append(td); body.append(tr);
+    } else {
+      const frag = document.createDocumentFragment();
+      rows.slice(0, MAX_ROWS).forEach(e => {
+        const v = verdictOf(e);
+        const tr = make('tr'); tr.dataset.v = v.v; if (e.id === freshId) tr.className = 'fresh';
+        const vd = make('td'); const tag = make('span', 'verdict', v.name); tag.dataset.v = v.v; tag.title = e.statusRaw; vd.append(tag);
+        const lat = make('td', 'num', fmtMs(e.latency)), cpu = make('td', 'num', `${e.cpu.toFixed(1)}%`);
+        frag.append(tr); tr.append(make('td', 't', fmtTime(e.ts)), make('td', 'dom', e.query), make('td', '', e.type), vd, lat, cpu, make('td', 't', e.client || '–'));
+      });
+      body.append(frag);
+    }
+    $('ledgerShown').textContent = `${Math.min(rows.length, MAX_ROWS)} shown of ${rows.length} matching, ${state.events.length} kept`;
+  }
 
-      function renderHistory(newestId = null) {
-        const body = byId('eventsBody');
-        body.replaceChildren();
-        const visible = history.filter(metric => {
-          const filterMatch = activeFilter === 'ALL' || (activeFilter === 'BLOCKED' ? isBlocked(metric.status) : metric.status === activeFilter);
-          const searchable = `${metric.query} ${metric.type} ${metric.status}`.toLowerCase();
-          return filterMatch && searchable.includes(searchTerm);
-        });
-        if (!visible.length) {
-          const message = history.length ? 'No events match these filters' : 'Waiting for telemetry';
-          const detail = history.length ? 'Try another outcome filter or search term.' : 'Run py src/scripts/test_gateway.py to send your first test queries.';
-          body.appendChild(emptyRow(message, detail));
-        } else {
-          visible.forEach(metric => {
-            const row = document.createElement('tr');
-            if (metric._id === newestId) row.classList.add('new-event');
-            const cells = [];
-            const time = document.createElement('td'); time.className = 'time-cell'; time.textContent = formatTime(metric.timestamp); cells.push(time);
-            const domain = document.createElement('td'); domain.className = 'domain-cell'; domain.textContent = metric.query; cells.push(domain);
-            const type = document.createElement('td'); const typeBadge = document.createElement('span'); typeBadge.className = 'record-type'; typeBadge.textContent = metric.type; type.appendChild(typeBadge); cells.push(type);
-            const decision = document.createElement('td'); const decisionLabel = document.createElement('span'); decisionLabel.className = `decision ${metric.status}`; decisionLabel.textContent = metric.status; decision.appendChild(decisionLabel); cells.push(decision);
-            const latency = document.createElement('td'); latency.className = 'latency-value'; latency.textContent = `${numeric(metric.latency_ms).toFixed(2)} ms`;
-            const track = document.createElement('span'); track.className = 'latency-track'; track.setAttribute('aria-hidden', 'true');
-            const fill = document.createElement('span'); fill.className = 'latency-fill';
-            const width = Math.max(3, Math.min(100, numeric(metric.latency_ms) / Math.max(1, ...chartValues) * 100));
-            fill.style.setProperty('--fill-width', `${width}%`); fill.style.width = `${width}%`; track.appendChild(fill); latency.appendChild(track); cells.push(latency);
-            const cpu = document.createElement('td'); cpu.className = 'cpu-cell'; cpu.textContent = `${numeric(metric.cpu_percent).toFixed(1)}%`; cells.push(cpu);
-            cells.forEach(cell => row.appendChild(cell)); body.appendChild(row);
-          });
-        }
-        byId('visibleCount').textContent = String(visible.length);
-        byId('storedCount').textContent = String(history.length);
-        updateCounters();
-      }
+  /* ---------- alerts, toast ---------- */
+  function toast(msg, v) {
+    const t = $('toast'); t.textContent = msg; t.dataset.v = v || 'error'; t.classList.add('show');
+    clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 3200);
+  }
+  function alertIfNeeded(e) {
+    if (e.status !== 'BOGUS' && e.status !== 'BLOCKED_CD') return;
+    if (Date.now() - state.lastToast < 1500) return;
+    state.lastToast = Date.now();
+    toast(e.status === 'BOGUS' ? `${e.query} failed DNSSEC validation. No answer was returned.` : `${e.query} was refused because the device asked to skip validation.`, verdictOf(e).v);
+  }
 
-      function processMetric(input) {
-        const metric = {
-          timestamp: typeof input.timestamp === 'string' ? input.timestamp : new Date().toISOString(),
-          query: typeof input.query === 'string' ? input.query.slice(0, 253) : 'unknown',
-          type: typeof input.type === 'string' ? input.type.slice(0, 20) : 'UNKNOWN',
-          status: typeof input.status === 'string' ? input.status : 'ERROR',
-          latency_ms: Math.max(0, numeric(input.latency_ms)),
-          cpu_percent: Math.max(0, Math.min(100, numeric(input.cpu_percent))),
-          _id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-        };
-        counts.total++;
-        if (metric.status === 'SECURE') counts.secure++;
-        else if (metric.status === 'INSECURE') counts.insecure++;
-        else counts.blocked++;
-        history.unshift(metric);
-        if (history.length > MAX_HISTORY) history.length = MAX_HISTORY;
-        chartLabels.push(formatTime(metric.timestamp));
-        chartValues.push(metric.latency_ms);
-        if (chartLabels.length > MAX_POINTS) { chartLabels.shift(); chartValues.shift(); }
-        chart.update('none');
-        updateLatency();
-        updateCounters();
-        ['total', metric.status === 'SECURE' ? 'secure' : metric.status === 'INSECURE' ? 'insecure' : 'blocked'].forEach(id => animateCard(byId(id)));
-        renderHistory(metric._id);
-        byId('feedSummary').textContent = `${counts.total} event${counts.total === 1 ? '' : 's'} observed this session`;
-      }
+  /* ---------- controls ---------- */
+  function updatePauseLabel() {
+    const b = $('pauseBtn');
+    b.setAttribute('aria-pressed', String(state.paused));
+    b.textContent = state.paused ? (state.pending.length ? `Resume (${state.pending.length} waiting)` : 'Resume updates') : 'Pause updates';
+    if (!demo && socket && socket.connected) setLink('on', state.paused ? 'Paused, events are queued' : 'Receiving gateway events');
+  }
+  $('pauseBtn').addEventListener('click', () => {
+    state.paused = !state.paused;
+    if (!state.paused && state.pending.length) {
+      const q = state.pending.splice(0);
+      q.forEach(raw => ingest(raw, false));
+      renderCurrentState();
+      toast(`Resumed. ${q.length} queued lookup${q.length === 1 ? '' : 's'} added.`, 'verified');
+    }
+    updatePauseLabel();
+  });
+  $('search').addEventListener('input', ev => { state.search = ev.target.value.trim().toLowerCase(); renderLedger(); });
+  $('resetBtn').addEventListener('click', () => {
+    state.events = []; state.domains.clear(); state.pending = []; ORDER.forEach(s => { state.counts[s] = 0; });
+    state.start = Date.now();
+    $('stamp').hidden = true; $('certificate').dataset.v = 'error';
+    $('certDomain').textContent = 'No lookups yet'; $('certSub').textContent = 'The next lookup will appear here.';
+    $('certWhy').textContent = 'The verdict for the newest lookup appears here, with the reason in plain words.';
+    ['factLatency', 'factCpu', 'factTime'].forEach(id => { $(id).textContent = '–'; });
+    $('factClientLabel').hidden = true; $('factClient').hidden = true;
+    renderTally(); renderPathCounts(); renderFigures(); renderDomains(); updateChart(); renderLedger(); updatePauseLabel();
+    toast('Session cleared.', 'unsigned');
+  });
 
-      socket.on('connect', () => {
-        byId('connectionDot').className = 'state-dot connected';
-        byId('connectionText').textContent = 'Telemetry connected';
-        byId('feedSummary').textContent = 'Live feed connected · awaiting events';
-      });
-      socket.on('disconnect', () => {
-        byId('connectionDot').className = 'state-dot offline';
-        byId('connectionText').textContent = 'Feed disconnected';
-        byId('feedSummary').textContent = 'Connection lost · reconnecting automatically';
-      });
-      socket.on('connect_error', () => {
-        byId('connectionDot').className = 'state-dot offline';
-        byId('connectionText').textContent = 'Connection retrying';
-      });
-      socket.on('dns_metric', metric => {
-        if (!metric || typeof metric !== 'object') return;
-        if (paused) {
-          pending.push(metric);
-          if (pending.length > 1000) pending.shift();
-          byId('feedSummary').textContent = `Feed paused · ${pending.length} event${pending.length === 1 ? '' : 's'} buffered`;
-          return;
-        }
-        processMetric(metric);
-      });
+  function download(name, mime, text) {
+    const url = URL.createObjectURL(new Blob([text], { type: mime }));
+    const a = make('a'); a.href = url; a.download = name; document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }
+  const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
+  function chronological() { return state.events.slice().reverse(); }
+  $('csvBtn').addEventListener('click', () => {
+    if (!state.events.length) { toast('Nothing to download yet.', 'unsigned'); return; }
+    const cols = ['timestamp', 'query', 'type', 'status', 'latency_ms', 'cpu_percent', 'client'];
+    const safe = v => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`; return `"${s.replace(/"/g, '""')}"`; };
+    const rows = chronological().map(e => [e.ts, e.queryRaw, e.type, e.statusRaw, e.latency, e.cpu, e.client].map(safe).join(','));
+    download(`aegisdns-${stamp()}.csv`, 'text/csv;charset=utf-8', [cols.join(','), ...rows].join('\r\n'));
+  });
+  $('jsonBtn').addEventListener('click', () => {
+    if (!state.events.length) { toast('Nothing to download yet.', 'unsigned'); return; }
+    const lines = chronological().map(e => JSON.stringify({ timestamp: e.ts, query: e.queryRaw, type: e.type, status: e.statusRaw, latency_ms: e.latency, cpu_percent: e.cpu, client: e.client || undefined }));
+    download(`aegisdns-${stamp()}.jsonl`, 'application/x-ndjson', lines.join('\n') + '\n');
+  });
 
-      document.querySelectorAll('[data-filter]').forEach(button => {
-        button.addEventListener('click', () => {
-          activeFilter = button.dataset.filter;
-          document.querySelectorAll('[data-filter]').forEach(item => item.classList.toggle('active', item === button));
-          renderHistory();
-        });
-      });
-      byId('searchInput').addEventListener('input', event => {
-        searchTerm = event.target.value.trim().toLowerCase();
-        renderHistory();
-      });
-      byId('clearButton').addEventListener('click', () => {
-        history.length = 0;
-        renderHistory();
-        toast('Session event log cleared. Counters and chart are unchanged.');
-      });
-      byId('pauseButton').addEventListener('click', () => {
-        paused = !paused;
-        byId('liveBars').classList.toggle('paused', paused);
-        byId('pauseLabel').textContent = paused ? 'Resume feed' : 'Pause feed';
-        byId('pauseIcon').innerHTML = paused
-          ? '<path d="m8 5 11 7-11 7V5Z" stroke-linejoin="round"/>'
-          : '<path d="M8 5v14M16 5v14" stroke-linecap="round"/>';
-        byId('pauseButton').classList.toggle('primary', paused);
-        if (!paused && pending.length) {
-          const queued = pending.splice(0);
-          queued.forEach(processMetric);
-          toast(`Feed resumed · ${queued.length} buffered event${queued.length === 1 ? '' : 's'} processed`);
-        } else {
-          byId('feedSummary').textContent = paused ? 'Feed paused · incoming events are buffered' : `${counts.total} events observed this session`;
-        }
-      });
-      byId('exportButton').addEventListener('click', () => {
-        if (!history.length) { toast('No event history to export yet.'); return; }
-        const columns = ['timestamp', 'query', 'type', 'status', 'latency_ms', 'cpu_percent'];
-        const quote = value => `"${String(value ?? '').replace(/"/g, '""')}"`;
-        const csv = [columns.join(','), ...history.slice().reverse().map(row => columns.map(key => quote(row[key])).join(','))].join('\r\n');
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a'); link.href = url; link.download = `aegisdns-events-${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
-        document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
-        toast('CSV export prepared.');
-      });
+  /* ---------- clock ---------- */
+  function tick() {
+    const s = Math.floor((Date.now() - state.start) / 1000), p = n => String(n).padStart(2, '0');
+    $('elapsed').textContent = `Session ${p(Math.floor(s / 3600))}:${p(Math.floor(s / 60) % 60)}:${p(s % 60)}`;
+  }
+  setInterval(tick, 1000);
 
-      document.querySelectorAll('[data-nav]').forEach(link => link.addEventListener('click', () => {
-        document.querySelectorAll('[data-nav]').forEach(item => item.classList.toggle('active', item === link));
-      }));
-      byId('sessionDate').textContent = new Date().toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
-      formatClock(); setInterval(formatClock, 1000);
-      updateCounters(); updateLatency();
-    })();
-  </script>
+  /* ---------- demo traffic (only with ?demo, or when opened without the backend) ---------- */
+  function startDemo() {
+    const pool = [['valid.aegis.test.', 'SECURE', 4, 14], ['valid.aegis.test.', 'SECURE', 4, 14], ['insecure.aegis.test.', 'INSECURE', 4, 14], ['bogus.aegis.test.', 'BOGUS', 8, 40], ['valid.aegis.test.', 'BLOCKED_CD', 1, 3]];
+    setInterval(() => {
+      const [q, s, lo, hi] = pool[Math.floor(Math.random() * pool.length)];
+      receive({ timestamp: new Date().toISOString(), query: q, type: 'A', status: s, latency_ms: lo + Math.random() * (hi - lo), cpu_percent: Math.random() * 6, client: 'esp32-demo' });
+    }, 1300);
+  }
+
+  /* ---------- init ---------- */
+  buildTally(); buildChips(); renderTally(); renderPathCounts(); renderFigures(); renderDomains(); renderLedger(); buildChart(); updatePauseLabel(); tick();
+  if (demo) startDemo();
+})();
+</script>
 </body>
 </html>

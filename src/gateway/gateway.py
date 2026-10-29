@@ -99,7 +99,7 @@ def cpu_percent() -> float:
 
 
 async def process_query(
-    query_wire: bytes, session: aiohttp.ClientSession
+    query_wire: bytes, session: aiohttp.ClientSession, client: str
 ) -> bytes:
     start = time.perf_counter()
     qname = "unknown"
@@ -206,6 +206,7 @@ async def process_query(
             "status": status,
             "latency_ms": round(latency_ms, 2),
             "cpu_percent": round(cpu_percent(), 1),
+            "client": client[:64],
         }
         print(json.dumps(metric), flush=True)
         asyncio.create_task(publish_metrics(session, metric))
@@ -235,12 +236,24 @@ async def handle_client(
     session: aiohttp.ClientSession,
 ) -> None:
     peer = writer.get_extra_info("peername")
-    print(f"[TLS] Client connected: {peer}", flush=True)
+    ssl_object = writer.get_extra_info("ssl_object")
+    certificate = ssl_object.getpeercert() if ssl_object else {}
+    subject = certificate.get("subject", ())
+    client = next(
+        (
+            value
+            for group in subject
+            for name, value in group
+            if name == "commonName"
+        ),
+        str(peer[0]) if isinstance(peer, tuple) and peer else "unknown",
+    )
+    print(f"[TLS] Client connected: {client} ({peer})", flush=True)
 
     try:
         while True:
             query_wire = await read_dns_message(reader)
-            response_wire = await process_query(query_wire, session)
+            response_wire = await process_query(query_wire, session, client)
             if response_wire:
                 await write_dns_message(writer, response_wire)
             else:
@@ -258,7 +271,7 @@ async def handle_client(
             await writer.wait_closed()
         except Exception:
             pass
-        print(f"[TLS] Client disconnected: {peer}", flush=True)
+        print(f"[TLS] Client disconnected: {client} ({peer})", flush=True)
 
 
 async def main() -> None:

@@ -390,6 +390,14 @@ the ignored `src/esp32/include/certs.h`; it requires a client certificate
 and key as well as the CA certificate. Never commit or share the generated
 header because it contains the client private key.
 
+When the board connects to the gateway and sends DNS queries, those
+lookups are forwarded to the dashboard automatically. The dashboard
+identifies a device using the common name (CN) in its mutually
+authenticated client certificate; issue a distinct client certificate
+CN for each device if you need to tell multiple devices apart. The
+dashboard keeps up to 2,000 recent events in memory and replays them to
+the page after a refresh while the dashboard process remains running.
+
 The firmware uses
 `WiFiClientSecure`, implements DNS-over-TLS framing with a 2-byte
 message-length prefix, sends DNS A queries, and prints response status
