@@ -2,7 +2,15 @@
 // There is intentionally NO plaintext/insecure fallback path in this file.
 #include <Arduino.h>
 #include <WiFi.h>
+#if __has_include(<WiFiClientSecure.h>)
 #include <WiFiClientSecure.h>
+using TlsClient = WiFiClientSecure;
+#elif __has_include(<NetworkClientSecure.h>)
+#include <NetworkClientSecure.h>
+using TlsClient = NetworkClientSecure;
+#else
+#error "ESP32 secure Wi-Fi client header is unavailable; select/install the ESP32 Arduino core"
+#endif
 #include <time.h>
 #include "secrets.h"   // Wi-Fi + gateway address (ignored by Git)
 #include "certs.h"     // CA_CERT, CLIENT_CERT, CLIENT_KEY (generated, ignored by Git)
@@ -10,7 +18,7 @@
 static const char* NAMES[] = {"valid.aegis.test", "bogus.aegis.test", "insecure.aegis.test"};
 static const size_t NAME_COUNT = sizeof(NAMES) / sizeof(NAMES[0]);
 
-static WiFiClientSecure tls;
+static TlsClient tls;
 
 static bool syncTime() {
   // TLS certificate validity checks need a correct clock.
@@ -64,26 +72,41 @@ static const char* rcodeName(uint8_t rc) {
                 case 3: return "NXDOMAIN"; case 5: return "REFUSED"; default: return "OTHER"; }
 }
 
-static void runQuery(const char* name) {
-  uint8_t q[300], resp[1300];
+static bool runQuery(const char* name) {
+  uint8_t q[300];
   uint16_t id = (uint16_t)esp_random();
   size_t qlen = buildQuery(name, q, sizeof(q), id);
-  if (!qlen) { Serial.printf("RESULT,%s,BUILD_ERROR\n", name); return; }
+  if (!qlen) { Serial.printf("RESULT,%s,BUILD_ERROR\n", name); return true; }
 
   uint32_t t0 = micros();
-  if (tls.write(q, qlen) != qlen) { Serial.printf("RESULT,%s,SEND_ERROR\n", name); return; }
+  if (tls.write(q, qlen) != qlen) { Serial.printf("RESULT,%s,SEND_ERROR\n", name); return false; }
   uint8_t lenb[2];
-  if (!readExact(lenb, 2, 5000)) { Serial.printf("RESULT,%s,TIMEOUT\n", name); return; }
+  if (!readExact(lenb, 2, 5000)) { Serial.printf("RESULT,%s,TIMEOUT\n", name); return false; }
   size_t rlen = ((size_t)lenb[0] << 8) | lenb[1];
-  if (rlen < 12 || rlen > sizeof(resp)) { Serial.printf("RESULT,%s,BAD_LENGTH,%u\n", name, (unsigned)rlen); return; }
-  if (!readExact(resp, rlen, 5000)) { Serial.printf("RESULT,%s,SHORT_READ\n", name); return; }
+  if (rlen < 12) { Serial.printf("RESULT,%s,BAD_LENGTH,%u\n", name, (unsigned)rlen); return false; }
+
+  uint8_t header[12];
+  uint32_t responseStart = millis();
+  if (!readExact(header, sizeof(header), 5000)) { Serial.printf("RESULT,%s,SHORT_READ\n", name); return false; }
+  bool idOk = (((uint16_t)header[0] << 8) | header[1]) == id;
+  if (!idOk) { Serial.printf("RESULT,%s,ID_MISMATCH\n", name); return false; }
+
+  size_t remaining = rlen - sizeof(header);
+  uint8_t discard[128];
+  while (remaining > 0) {
+    uint32_t elapsed = millis() - responseStart;
+    if (elapsed >= 5000) { Serial.printf("RESULT,%s,SHORT_READ\n", name); return false; }
+    size_t chunk = remaining < sizeof(discard) ? remaining : sizeof(discard);
+    if (!readExact(discard, chunk, 5000 - elapsed)) { Serial.printf("RESULT,%s,SHORT_READ\n", name); return false; }
+    remaining -= chunk;
+  }
   uint32_t us = micros() - t0;
 
-  bool idOk = (((uint16_t)resp[0] << 8) | resp[1]) == id;
-  uint8_t rcode = resp[3] & 0x0F;
-  bool ad = resp[3] & 0x20;
-  Serial.printf("RESULT,%s,%s,rcode=%u,AD=%d,id_match=%d,latency_ms=%.2f,free_heap=%u\n",
-                name, rcodeName(rcode), rcode, ad, idOk, us / 1000.0, (unsigned)ESP.getFreeHeap());
+  uint8_t rcode = header[3] & 0x0F;
+  bool ad = header[3] & 0x20;
+  Serial.printf("RESULT,%s,%s,rcode=%u,AD=%d,id_match=1,latency_ms=%.2f,free_heap=%u\n",
+                name, rcodeName(rcode), rcode, ad, us / 1000.0, (unsigned)ESP.getFreeHeap());
+  return true;
 }
 
 static void runRound() {
@@ -102,7 +125,9 @@ static void runRound() {
   }
   Serial.printf("TLS_HANDSHAKE_OK,handshake_ms=%lu,free_heap=%u\n",
                 (unsigned long)(millis() - t0), (unsigned)ESP.getFreeHeap());
-  for (size_t i = 0; i < NAME_COUNT; i++) runQuery(NAMES[i]);
+  for (size_t i = 0; i < NAME_COUNT; i++) {
+    if (!runQuery(NAMES[i])) { tls.stop(); return; }
+  }
   tls.stop();
 }
 
