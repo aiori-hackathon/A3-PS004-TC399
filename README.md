@@ -398,10 +398,14 @@ CN for each device if you need to tell multiple devices apart. The
 dashboard keeps up to 2,000 recent events in memory and replays them to
 the page after a refresh while the dashboard process remains running.
 
-The firmware uses
-`WiFiClientSecure`, implements DNS-over-TLS framing with a 2-byte
-message-length prefix, sends DNS A queries, and prints response status
-and query latency over Serial. **Physical ESP32 integration is pending
+The firmware uses the secure client header available in the selected
+ESP32 Arduino core (`WiFiClientSecure.h`, or
+`NetworkClientSecure.h` as a fallback), implements DNS-over-TLS framing
+with a 2-byte message-length prefix, sends DNS A queries, checks the
+response transaction ID, and prints response status and query latency
+over Serial. The ESP32 reports the response AD flag; it does not
+independently validate DNSSEC. DNSSEC validation is performed by the
+gateway's configured resolver. **Physical ESP32 integration is pending
 and must not be described as verified until tested on the target
 board.**
 

@@ -14,6 +14,9 @@ using TlsClient = NetworkClientSecure;
 #include <time.h>
 #include "secrets.h"   // Wi-Fi + gateway address (ignored by Git)
 #include "certs.h"     // CA_CERT, CLIENT_CERT, CLIENT_KEY (generated, ignored by Git)
+#include <time.h>
+#include <string.h>
+#include <esp_system.h>
 
 static const char* NAMES[] = {"valid.aegis.test", "bogus.aegis.test", "insecure.aegis.test"};
 static const size_t NAME_COUNT = sizeof(NAMES) / sizeof(NAMES[0]);
