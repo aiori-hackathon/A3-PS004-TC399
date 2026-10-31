@@ -10,6 +10,7 @@ validation, applies an explicit policy to the result, and publishes
 telemetry to a live web dashboard.
 
 **Introductory video:** https://youtu.be/FeKZ9_0cWfo
+**Live Working Demo video** https://youtu.be/X0fRskhgpoM?si=rnq5qApaaiQZneeC
 
 > **Project status (verified as of this README):** The local
 > Docker-based DNSSEC lab and gateway test script have been exercised on
