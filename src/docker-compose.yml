@@ -5,7 +5,6 @@ services:
     profiles: ["tools"]
     build:
       context: ./tools/certgen
-    container_name: aegisdns-certgen
     environment:
       GATEWAY_IP: ${GATEWAY_IP:-127.0.0.1}
     volumes:
@@ -14,13 +13,12 @@ services:
   authoritative:
     build:
       context: ./dns
-    container_name: aegisdns-authoritative
     restart: unless-stopped
     volumes:
       - ./dns/generated:/var/lib/bind/generated
     networks:
       aegis_net:
-        ipv4_address: 172.28.0.10
+        ipv4_address: 172.29.0.10
     expose:
       - "53/udp"
       - "53/tcp"
@@ -34,7 +32,6 @@ services:
   resolver:
     build:
       context: ./resolver
-    container_name: aegisdns-resolver
     restart: unless-stopped
     volumes:
       - ./dns/generated:/generated:ro
@@ -43,7 +40,7 @@ services:
         condition: service_started
     networks:
       aegis_net:
-        ipv4_address: 172.28.0.20
+        ipv4_address: 172.29.0.20
     expose:
       - "53/udp"
       - "53/tcp"
@@ -52,10 +49,9 @@ services:
     build:
       context: ..
       dockerfile: src/gateway/Dockerfile
-    container_name: aegisdns-gateway
     restart: unless-stopped
     environment:
-      RESOLVER_HOST: "172.28.0.20"
+      RESOLVER_HOST: "172.29.0.20"
       RESOLVER_PORT: "53"
       METRICS_URL: "http://dashboard:3000/api/metrics"
       TLS_CERT: "/app/certs/server.crt"
@@ -69,25 +65,24 @@ services:
       - resolver
       - dashboard
     ports:
-      - "853:853/tcp"
+      - "8853:853/tcp"
     networks:
       aegis_net:
-        ipv4_address: 172.28.0.30
+        ipv4_address: 172.29.0.30
 
   dashboard:
     build:
       context: ./dashboard
-    container_name: aegisdns-dashboard
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3001:3000"
     networks:
       aegis_net:
-        ipv4_address: 172.28.0.40
+        ipv4_address: 172.29.0.40
 
 networks:
   aegis_net:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.28.0.0/24
+        - subnet: 172.29.0.0/24
