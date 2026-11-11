@@ -35,6 +35,9 @@ services:
     restart: unless-stopped
     volumes:
       - ./dns/generated:/generated:ro
+    ports:
+      - "127.0.0.1:15353:53/udp"
+      - "127.0.0.1:15353:53/tcp"
     depends_on:
       authoritative:
         condition: service_started

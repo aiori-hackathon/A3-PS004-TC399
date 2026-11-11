@@ -114,7 +114,23 @@ docker compose --env-file .env -f src/docker-compose.yml exec resolver dig '@127
 docker compose --env-file .env -f src/docker-compose.yml exec resolver dig '@127.0.0.1' insecure.aegis.test A +dnssec
 ```
 
-## 6. Build, Upload, and Monitor the ESP32
+## 6. Measure Gateway Overhead
+
+With the stack running and local certificates generated, run the benchmark
+from the repository root:
+
+```powershell
+py src/scripts/benchmark_gateway.py --cold-samples 3 --warm-samples 20 --json-out benchmark-results.json
+```
+
+The direct Unbound baseline uses `127.0.0.1:15353`; the authenticated gateway's
+container port `853` is mapped to host port `8853`. Cold samples restart
+Unbound before each measured DNS request. Warm samples prime the same name
+before timing. The unauthenticated case only measures mTLS rejection and has
+no Unbound cache state. Restarting Unbound during the cold phase briefly
+interrupts other resolver clients.
+
+## 7. Build, Upload, and Monitor the ESP32
 
 The PlatformIO firmware project is located at `src/esp32/`.
 

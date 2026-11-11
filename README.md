@@ -797,7 +797,8 @@ Update it only when a task has actually been completed and verified.
     outcomes.
 -   [ ] Add authentication/access controls to the telemetry endpoint
     before any broader deployment.
--   [ ] Implement a baseline-versus-AegisDNS benchmark runner.
+-   [x] Implement a baseline-versus-AegisDNS benchmark runner with separate
+    cold-cache and warm-cache measurements.
 -   [ ] Measure median and p95 latency, throughput, success/rejection
     rates, gateway CPU/RSS memory, resolver response time, TLS/mTLS
     overhead, and ESP32 free heap/handshake timing where applicable.
@@ -816,6 +817,33 @@ Compare clearly defined configurations:
     DNSSEC-validation path.
 3.  **Negative cases:** Bogus DNSSEC responses and unauthenticated
     connection attempts.
+
+The local benchmark runner compares direct Unbound, authenticated gateway,
+bogus-signature, and unauthenticated-gateway paths. It reports cold and warm
+samples separately, including median and p95 latency. Cold DNS samples restart
+Unbound before each measurement; warm samples prime the same query first.
+Unauthenticated TLS rejection does not query Unbound, so its cache state is
+reported as not applicable. The cold run therefore briefly interrupts other
+clients using the local resolver.
+
+Start the Compose stack and generate the local PKI files first, then run from
+the repository root:
+
+```powershell
+py src/scripts/benchmark_gateway.py --cold-samples 3 --warm-samples 20 --json-out benchmark-results.json
+```
+
+The resolver is published only on `127.0.0.1:15353` for direct baseline
+measurements. The gateway listens on port `853` inside Docker and is published
+as `127.0.0.1:8853` on the host. The JSON file records each response as well as
+summary statistics. Results are local to the hardware and should not be
+compared without recording system load and configuration. The `bogus` path
+checks for the configured invalid-signature test domain returning `SERVFAIL`
+with `AD=false`; if Unbound omits DNSSEC Bogus EDE, the gateway's status is
+`ERROR`, not `BOGUS`, and that distinction is retained in each JSON response.
+Each gateway sample opens a new TCP/TLS connection, so the latency delta
+includes connection setup and mTLS authentication rather than DNS processing
+alone.
 
 ## 12. References
 
