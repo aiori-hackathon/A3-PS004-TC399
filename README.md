@@ -12,6 +12,72 @@ telemetry to a live web dashboard.
 **Introductory video:** https://youtu.be/FeKZ9_0cWfo
 **Live Working Demo video** https://youtu.be/X0fRskhgpoM?si=rnq5qApaaiQZneeC
 
+## Current dashboard update, ports, and quick start
+
+The current dashboard uses the Bolt-based AegisDNS interface. It presents five main views:
+`OUTCOMES`, `PATH`, `LATENCY`, `QUERIES`, and `EVENTS`. It also shows the
+ESP32 → Python gateway → Unbound → BIND9 request path, the latest DNS
+verdict, retained gateway metrics, distinct client labels, and latency
+statistics. The dashboard reads the real gateway metrics exposed by
+`GET /api/metrics`; it does not depend on a separate device-telemetry API.
+
+### Current ports and network addresses
+
+| Component | Host-side address / port | Container-side port | Notes |
+|---|---|---|---|
+| Dashboard | `127.0.0.1:3001` | `3000/tcp` | Open `http://127.0.0.1:3001`; bound to localhost only |
+| DNS-over-TLS gateway | `<HOST-LAN-IP>:8853/tcp` | `853/tcp` | ESP32 connects to the host's LAN IP on port `8853` |
+| Unbound resolver | Not published on the host | `53/udp`, `53/tcp` | Internal Docker network only |
+| BIND9 authoritative server | Not published on the host | `53/udp`, `53/tcp` | Internal Docker network only |
+
+The gateway sends metrics to the dashboard over the internal Docker network
+at `http://dashboard:3000/api/metrics`. Do not change this internal URL to
+the host dashboard port. The current Docker bridge subnet is
+`172.29.0.0/24`, with the authoritative server at `172.29.0.10`, resolver
+at `172.29.0.20`, gateway at `172.29.0.30`, and dashboard at
+`172.29.0.40`.
+
+### Start the project
+
+Run these PowerShell commands from the repository root (the folder
+containing `.env.example` and `src/`):
+
+```powershell
+# Create a local environment file once; do not overwrite an existing one.
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+
+# First-time setup only, or when certificates need to be regenerated.
+docker compose --env-file .env -f src/docker-compose.yml --profile tools run --build --rm certgen
+
+# Build and start the complete stack.
+docker compose --env-file .env -f src/docker-compose.yml up --build -d
+
+# Check service status.
+docker compose --env-file .env -f src/docker-compose.yml ps
+```
+
+Open the dashboard at **http://127.0.0.1:3001**. For ESP32 access, set the
+device's gateway address to the computer's LAN IP and port **8853**; do not
+use `localhost` on the ESP32. Allow inbound TCP `8853` through the host
+firewall when the ESP32 connects from the LAN. Keep the dashboard bound to
+localhost unless remote dashboard access is intentionally configured.
+
+Useful commands:
+
+```powershell
+# Follow gateway logs.
+docker compose --env-file .env -f src/docker-compose.yml logs -f gateway
+
+# Follow dashboard logs.
+docker compose --env-file .env -f src/docker-compose.yml logs -f dashboard
+
+# Rebuild only the dashboard after frontend changes.
+docker compose --env-file .env -f src/docker-compose.yml up -d --build --force-recreate dashboard
+
+# Stop the stack.
+docker compose --env-file .env -f src/docker-compose.yml down
+```
+
 > **Project status (verified as of this README):** The local
 > Docker-based DNSSEC lab and gateway test script have been exercised on
 > Windows 11 with Docker Desktop. The controlled resolver outcomes
@@ -49,7 +115,7 @@ telemetry to a live web dashboard.
 
 ``` text
 ESP32 client (target)
-Wi-Fi + mutual TLS / DNS-over-TLS (TCP 853)
+Wi-Fi + mutual TLS / DNS-over-TLS (host TCP 8853 → container TCP 853)
                     |
                     v
          Python asyncio DoT gateway
@@ -74,7 +140,7 @@ Python gateway -- HTTP POST /api/metrics --> Express + Socket.io
                                                |
                                                v
                                           Live dashboard
-                                          http://localhost:3000
+                                          http://127.0.0.1:3001
 ```
 
 ### Request flow
@@ -248,10 +314,10 @@ docker compose --env-file .env -f src/docker-compose.yml logs --tail 100 gateway
 docker compose --env-file .env -f src/docker-compose.yml logs --tail 100 dashboard
 ```
 
--   Dashboard: http://localhost:3000
--   Gateway: TCP port `853` on the Docker host.
+-   Dashboard: http://127.0.0.1:3001 (host `3001` → container `3000`).
+-   Gateway: TCP port `8853` on the Docker host (mapped to container port `853`).
 -   The current Compose configuration binds the dashboard to
-    `127.0.0.1:3000` for local access.
+    `127.0.0.1:3001` for local access.
 
 Do not expose the resolver or authoritative DNS service publicly.
 
@@ -344,7 +410,7 @@ insecure.aegis.test   INSECURE    rcode=0 AD=0
 CD=1 test             REFUSED     rcode=5 AD=0
 ```
 
-Exact spacing and latency vary. Keep http://localhost:3000 open.
+Exact spacing and latency vary. Keep http://127.0.0.1:3001 open.
 Accepted metrics are sent to Express at `POST /api/metrics` and
 broadcast to browsers through Socket.io as the `dns_metric` event.
 Extended DNS Error (EDE) details returned by the resolver are included in
@@ -464,7 +530,7 @@ time as well as gateway/resolver response time.
     covered by the gateway certificate. `localhost` on the ESP32 refers
     to the ESP32 itself, not the laptop.
 6.  Ensure the ESP32 and gateway host can reach each other (same LAN for
-    the initial test), TCP 853 is allowed by the host firewall, and the
+    the initial test), TCP 8853 is allowed by the host firewall, and the
     gateway is running.
 7.  Query `valid.aegis.test`, `bogus.aegis.test`, and
     `insecure.aegis.test`; compare serial output with dashboard events.
@@ -596,7 +662,7 @@ and `docker info`.
 Confirm that you are running Compose from the repository root and using
 `-f src/docker-compose.yml`. This file pins the project name so it
 reuses the AegisDNS network. If the error continues, another Docker
-network may be using the configured `172.28.0.0/24` subnet. Check
+network may be using the configured `172.29.0.0/24` subnet. Check
 `docker network ls` and inspect the relevant network before changing
 anything. Do not remove or prune networks belonging to other projects.
 The subnet is paired with static service IPs in `src/docker-compose.yml`;
@@ -657,7 +723,7 @@ that the gateway's metrics URL uses the Compose service name for the
 dashboard when called from inside Docker.
 
 **ESP32 TLS connection fails**\
-Check Wi-Fi reachability, host firewall TCP 853, client certificate
+Check Wi-Fi reachability, host firewall TCP 8853, client certificate
 trust, gateway certificate SAN/hostname match, and that the
 certificate/private-key pair is correct. Do not disable certificate
 verification.
