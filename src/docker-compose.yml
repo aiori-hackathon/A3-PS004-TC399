@@ -80,6 +80,18 @@ services:
       aegis_net:
         ipv4_address: 172.29.0.40
 
+  dashboard-html:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile.html
+    restart: unless-stopped
+    depends_on:
+      - dashboard
+    ports:
+      - "127.0.0.1:3000:80"
+    networks:
+      - aegis_net
+
 networks:
   aegis_net:
     driver: bridge

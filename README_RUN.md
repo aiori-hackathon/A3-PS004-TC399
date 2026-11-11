@@ -48,15 +48,20 @@ Expected services:
 - `authoritative`
 - `resolver`
 - `gateway`
-- `dashboard`
+- `dashboard` (React UI and shared backend)
+- `dashboard-html` (HTML UI on port 3000)
 
 ### Open the dashboard
 
-Open this address in your browser:
+The HTML dashboard is at:
 
 http://localhost:3000
 
-The gateway listens on TCP port `853` on the Docker host.
+The React dashboard remains available at http://localhost:3001. Both
+frontends use the same backend APIs and live telemetry.
+
+The gateway listens on TCP port `8853` on the Docker host and forwards it
+to port `853` inside the container.
 
 ## 3. Check Logs and Service Health
 

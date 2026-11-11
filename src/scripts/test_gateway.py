@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PKI = ROOT / "pki"
 HOST = "127.0.0.1"
-PORT = 853
+PORT = 8853
 DOMAINS = [
     "valid.aegis.test",
     "bogus.aegis.test",
