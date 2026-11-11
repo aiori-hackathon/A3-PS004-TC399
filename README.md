@@ -423,6 +423,25 @@ browsers on Socket.IO connection, so refreshing the page restores device
 history while the dashboard process is running. Restarting the dashboard
 clears this in-memory history.
 
+The regression tests are offline unit tests: they do not start Docker, contact
+Unbound, or make external network requests. Install the project's Python
+requirements once if they are not already installed:
+
+```powershell
+py -m pip install -r requirements.txt
+```
+
+With Python dependencies and Node.js available, run the complete suite from
+the repository root with one command:
+
+```powershell
+py tests/run_tests.py
+```
+
+These tests cover gateway classification and packet handling, serial-line
+parsing, and dashboard JSON payload validation. They complement the live
+Docker integration test above.
+
 Useful checks:
 
 ``` powershell
