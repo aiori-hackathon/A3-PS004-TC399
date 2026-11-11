@@ -830,17 +830,24 @@ Start the Compose stack and generate the local PKI files first, then run from
 the repository root:
 
 ```powershell
-py src/scripts/benchmark_gateway.py --cold-samples 3 --warm-samples 20 --json-out benchmark-results.json
+py src/scripts/benchmark_gateway.py --cold-samples 3 --warm-samples 20
 ```
 
 The resolver is published only on `127.0.0.1:15353` for direct baseline
 measurements. The gateway listens on port `853` inside Docker and is published
-as `127.0.0.1:8853` on the host. The JSON file records each response as well as
-summary statistics. Results are local to the hardware and should not be
-compared without recording system load and configuration. The `bogus` path
-checks for the configured invalid-signature test domain returning `SERVFAIL`
-with `AD=false`; if Unbound omits DNSSEC Bogus EDE, the gateway's status is
-`ERROR`, not `BOGUS`, and that distinction is retained in each JSON response.
+as `127.0.0.1:8853` on the host. Each run writes a persistent
+`benchmark-results.json` file in the repository root (override with
+`--json-out`). It records separate baseline and gateway results, sample count,
+median and p95 latency, success/failure counts, per-sample responses, and the
+observed EDE-based DNSSEC verdict plus verdict counts. These direct measurements
+are the benchmark record; in-memory dashboard metrics are not used. Results
+are local to the hardware and should not be compared without recording system
+load and configuration. Success counts mean the measured DNS response matches
+the expected RCODE/AD bits, or that the unauthenticated TLS connection was
+rejected; DNSSEC verdicts are recorded independently. The `bogus` path checks
+for the configured invalid-signature test domain returning `SERVFAIL` with
+`AD=false`; if Unbound omits DNSSEC Bogus EDE, the gateway's observed verdict
+is `ERROR`, not `BOGUS`, and that distinction is retained in each JSON response.
 Each gateway sample opens a new TCP/TLS connection, so the latency delta
 includes connection setup and mTLS authentication rather than DNS processing
 alone.

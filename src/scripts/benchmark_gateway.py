@@ -115,18 +115,29 @@ def read_tls_dns_response(
 def response_result(
     response: dns.message.Message, latency_ms: float
 ) -> dict:
+    rcode = response.rcode()
+    authenticated = bool(response.flags & dns.flags.AD)
+    if rcode == dns.rcode.SERVFAIL:
+        verdict = (
+            "BOGUS"
+            if any(
+                isinstance(option, dns.edns.EDEOption)
+                and option.code == dns.edns.EDECode.DNSSEC_BOGUS
+                for option in response.options
+            )
+            else "ERROR"
+        )
+    elif rcode in (dns.rcode.NOERROR, dns.rcode.NXDOMAIN):
+        verdict = "SECURE" if authenticated else "INSECURE"
+    else:
+        verdict = "ERROR"
+
     return {
         "latency_ms": round(latency_ms, 3),
-        "rcode": dns.rcode.to_text(response.rcode()),
-        "ad": bool(response.flags & dns.flags.AD),
-        "status": (
-            "SECURE"
-            if response.rcode() in (dns.rcode.NOERROR, dns.rcode.NXDOMAIN)
-            and response.flags & dns.flags.AD
-            else "INSECURE"
-            if response.rcode() in (dns.rcode.NOERROR, dns.rcode.NXDOMAIN)
-            else "ERROR"
-        ),
+        "rcode": dns.rcode.to_text(rcode),
+        "ad": authenticated,
+        "status": verdict,
+        "dnssec_verdict": verdict,
     }
 
 
@@ -188,12 +199,14 @@ def query_unauthenticated(
             return {
                 "latency_ms": round(elapsed_ms, 3),
                 "rejected": True,
+                "dnssec_verdict": "NOT_APPLICABLE",
                 "reason": str(exc)[:160],
             }
     elapsed_ms = (time.perf_counter() - started) * 1000
     return {
         **response_result(response, elapsed_ms),
         "rejected": False,
+        "dnssec_verdict": "NOT_APPLICABLE",
         "reason": "Gateway returned a DNS response without client authentication",
     }
 
@@ -236,15 +249,36 @@ def wait_for_resolver(host: str, port: int) -> None:
 
 def summarize(samples: list[dict]) -> dict:
     if not samples:
-        return {"samples": 0}
+        return {
+            "samples": 0,
+            "sample_count": 0,
+            "success_count": 0,
+            "failure_count": 0,
+            "dnssec_verdict": "NOT_APPLICABLE",
+            "dnssec_verdict_counts": {},
+        }
     latencies = sorted(sample["latency_ms"] for sample in samples)
     p95_index = max(0, math.ceil(0.95 * len(latencies)) - 1)
+    verdict_counts = {}
+    for sample in samples:
+        verdict = sample.get("dnssec_verdict", "NOT_APPLICABLE")
+        verdict_counts[verdict] = verdict_counts.get(verdict, 0) + 1
+    verdict = (
+        next(iter(verdict_counts))
+        if len(verdict_counts) == 1
+        else "MIXED"
+    )
     return {
         "samples": len(latencies),
+        "sample_count": len(latencies),
+        "success_count": sum(sample.get("success") is True for sample in samples),
+        "failure_count": sum(sample.get("success") is False for sample in samples),
         "median_ms": round(statistics.median(latencies), 3),
         "p95_ms": round(latencies[p95_index], 3),
         "min_ms": round(latencies[0], 3),
         "max_ms": round(latencies[-1], 3),
+        "dnssec_verdict": verdict,
+        "dnssec_verdict_counts": verdict_counts,
     }
 
 
@@ -257,7 +291,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cold-samples", type=int, default=3)
     parser.add_argument("--warm-samples", type=int, default=20)
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
-    parser.add_argument("--json-out", type=Path)
+    parser.add_argument(
+        "--json-out",
+        type=Path,
+        default=ROOT / "benchmark-results.json",
+        help="Persistent JSON output path (default: benchmark-results.json in the repository root)",
+    )
     args = parser.parse_args()
     if args.cold_samples < 1 or args.warm_samples < 1:
         parser.error("--cold-samples and --warm-samples must be positive")
@@ -293,6 +332,42 @@ def run_scenario(scenario: dict, args: argparse.Namespace, ident: int) -> dict:
     )
 
 
+def measure_sample(
+    scenario: dict, args: argparse.Namespace, ident: int
+) -> dict:
+    started = time.perf_counter()
+    try:
+        sample = run_scenario(scenario, args, ident)
+    except (dns.exception.DNSException, OSError, TimeoutError, ValueError) as exc:
+        sample = {
+            "latency_ms": round((time.perf_counter() - started) * 1000, 3),
+            "error": str(exc)[:240],
+            "dnssec_verdict": "ERROR",
+        }
+
+    if scenario["transport"] == "unauthenticated_tls":
+        sample["dnssec_verdict"] = "NOT_APPLICABLE"
+        sample["success"] = sample.get("rejected") is True
+        if not sample["success"]:
+            sample.setdefault(
+                "failure_reason",
+                "Gateway did not reject the unauthenticated connection",
+            )
+        return sample
+
+    expected = scenario["expected"]
+    sample["success"] = (
+        sample.get("rcode") == expected["rcode"]
+        and sample.get("ad") == expected["ad"]
+    )
+    if not sample["success"]:
+        sample.setdefault(
+            "failure_reason",
+            f"Expected {expected['rcode']} with AD={expected['ad']}",
+        )
+    return sample
+
+
 def run_phase(
     phase: str,
     scenarios: tuple[dict, ...],
@@ -304,9 +379,13 @@ def run_phase(
     for scenario in scenarios:
         is_unauthenticated = scenario["transport"] == "unauthenticated_tls"
         count = args.cold_samples if phase == "cold" else args.warm_samples
+        prime_error = None
 
         if phase == "warm":
-            run_scenario(scenario, args, ident)
+            try:
+                run_scenario(scenario, args, ident)
+            except (dns.exception.DNSException, OSError, TimeoutError, ValueError) as exc:
+                prime_error = str(exc)[:240]
             ident = (ident + 1) & 0xFFFF
 
         samples = []
@@ -314,35 +393,34 @@ def run_phase(
             if phase == "cold" and not is_unauthenticated:
                 restart_resolver()
                 wait_for_resolver(args.resolver_host, args.resolver_port)
-            sample = run_scenario(scenario, args, ident)
+            sample = measure_sample(scenario, args, ident)
+            if prime_error is not None:
+                sample["success"] = False
+                sample["failure_reason"] = (
+                    f"Warm-up query failed; cache state is not warm: {prime_error}"
+                )
             ident = (ident + 1) & 0xFFFF
             samples.append(sample)
-
-        if is_unauthenticated:
-            if any(not sample.get("rejected") for sample in samples):
-                raise RuntimeError(
-                    "Gateway accepted a connection without a client certificate"
-                )
-        elif any(
-            sample.get("rcode") != scenario["expected"]["rcode"]
-            or sample.get("ad") != scenario["expected"]["ad"]
-            for sample in samples
-        ):
-            raise RuntimeError(
-                f"Unexpected DNS verdict during {scenario['name']} benchmark"
-            )
 
         summaries[scenario["name"]] = {
             "description": scenario["description"],
             "resolver_cache": "not_applicable" if is_unauthenticated else phase,
+            "success_definition": (
+                "mTLS connection rejected without a client certificate"
+                if is_unauthenticated
+                else "DNS response matches expected RCODE and AD bit"
+            ),
+            "expected_outcome": (
+                "reject_unauthenticated_connection"
+                if is_unauthenticated
+                else scenario["expected"]
+            ),
             **summarize(samples),
             "rejected": sum(
                 sample.get("rejected") is True for sample in samples
             ),
-            "responses": [
-                {key: value for key, value in sample.items() if key != "latency_ms"}
-                for sample in samples
-            ],
+            "warm_prime_error": prime_error,
+            "responses": samples,
         }
     return summaries, ident
 
@@ -402,7 +480,11 @@ def main() -> int:
         return 1
 
     report = {
+        "schema_version": 1,
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "measurement_source": (
+            "Direct DNS/TLS benchmark requests; dashboard metrics are not used."
+        ),
         "configuration": {
             "resolver": f"{args.resolver_host}:{args.resolver_port}",
             "gateway": f"{args.gateway_host}:{args.gateway_port}",
@@ -426,12 +508,17 @@ def main() -> int:
             ),
         }
     print_report(report)
-    if args.json_out:
-        output_path = args.json_out.resolve()
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-        print(f"\nJSON results: {output_path}")
-    return 0
+    output_path = args.json_out.resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(f"\nJSON results: {output_path}")
+    has_failures = any(
+        result["failure_count"] > 0
+        for phase in ("cold", "warm")
+        for result in report[phase].values()
+        if "failure_count" in result
+    )
+    return 1 if has_failures else 0
 
 
 if __name__ == "__main__":

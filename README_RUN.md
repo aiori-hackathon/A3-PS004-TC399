@@ -120,7 +120,7 @@ With the stack running and local certificates generated, run the benchmark
 from the repository root:
 
 ```powershell
-py src/scripts/benchmark_gateway.py --cold-samples 3 --warm-samples 20 --json-out benchmark-results.json
+py src/scripts/benchmark_gateway.py --cold-samples 3 --warm-samples 20
 ```
 
 The direct Unbound baseline uses `127.0.0.1:15353`; the authenticated gateway's
@@ -128,7 +128,11 @@ container port `853` is mapped to host port `8853`. Cold samples restart
 Unbound before each measured DNS request. Warm samples prime the same name
 before timing. The unauthenticated case only measures mTLS rejection and has
 no Unbound cache state. Restarting Unbound during the cold phase briefly
-interrupts other resolver clients.
+interrupts other resolver clients. The script always saves a JSON benchmark
+record to `benchmark-results.json` in the repository root; `--json-out` can
+select another path. The file records sample counts, median/p95 latency,
+success/failure counts, and observed DNSSEC verdicts per baseline and gateway
+path. It does not use or depend on dashboard metrics.
 
 ## 7. Build, Upload, and Monitor the ESP32
 
