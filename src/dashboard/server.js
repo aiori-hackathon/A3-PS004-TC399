@@ -9,7 +9,9 @@ const server = http.createServer(app);
 const io = new Server(server);
 const PORT = Number(process.env.PORT || 3000);
 const MAX_METRICS = 2000;
+const MAX_DEVICE_TELEMETRY = 2000;
 const metrics = [];
+const deviceTelemetry = [];
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '16kb' }));
@@ -21,6 +23,10 @@ app.get('/health', (_req, res) => {
 
 app.get('/api/metrics', (_req, res) => {
   res.json({ metrics });
+});
+
+app.get('/api/device/telemetry', (_req, res) => {
+  res.json({ events: deviceTelemetry });
 });
 
 const validStatuses = new Set([
@@ -125,12 +131,15 @@ app.post('/api/device/telemetry', (req, res) => {
       break;
   }
 
+  deviceTelemetry.push(event);
+  if (deviceTelemetry.length > MAX_DEVICE_TELEMETRY) deviceTelemetry.shift();
   io.emit('device_telemetry', event);
   res.status(202).json({ accepted: true });
 });
 
 io.on('connection', (socket) => {
   console.log(`[Dashboard] Browser connected: ${socket.id}`);
+  socket.emit('device_telemetry_history', { events: deviceTelemetry.slice() });
   socket.on('disconnect', () => console.log(`[Dashboard] Browser disconnected: ${socket.id}`));
 });
 

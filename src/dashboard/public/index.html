@@ -269,7 +269,22 @@
       <h2 id="deviceTelemetryTitle">ESP32 telemetry</h2>
       <p id="deviceTelemetryStatus" role="status" aria-live="polite">Waiting for device telemetry</p>
     </div>
-    <p id="deviceTelemetryDetail" class="path-lede">The latest serial bridge event will appear here.</p>
+    <div class="perf">
+      <dl class="figures">
+        <dt>Last TLS handshake</dt><dd id="deviceHandshake">–</dd>
+        <dt>Last known heap</dt><dd id="deviceHeap">–</dd>
+        <dt>Serial bridge</dt><dd id="deviceBridge">–</dd>
+        <dt>Latest device event</dt><dd id="deviceLatestEvent">–</dd>
+      </dl>
+      <table class="domains" aria-label="Latest ESP32 DNS results">
+        <thead><tr><th>Domain</th><th>Latest device result</th></tr></thead>
+        <tbody>
+          <tr><td>valid.aegis.test</td><td id="deviceDnsValid">No result yet</td></tr>
+          <tr><td>bogus.aegis.test</td><td id="deviceDnsBogus">No result yet</td></tr>
+          <tr><td>insecure.aegis.test</td><td id="deviceDnsInsecure">No result yet</td></tr>
+        </tbody>
+      </table>
+    </div>
   </section>
 
   <section class="tally-wrap" aria-labelledby="tallyTitle">
@@ -395,10 +410,13 @@
   } else {
     socket = io();
     let syncGeneration = 0, syncing = false, liveBuffer = [];
+    let deviceSyncing = true, deviceLiveBuffer = [];
     socket.on('connect', async () => {
       const generation = ++syncGeneration;
       syncing = true;
       liveBuffer = [];
+      deviceSyncing = true;
+      deviceLiveBuffer = [];
       setLink('on', state.paused ? 'Paused' : 'Loading gateway events');
       try {
         const response = await fetch('/api/metrics');
@@ -436,37 +454,87 @@
       else receive(m);
     });
     socket.on('device_telemetry', event => {
-      if (!event || typeof event !== 'object' || typeof event.kind !== 'string') return;
-
-      const status = $('deviceTelemetryStatus');
-      const detail = $('deviceTelemetryDetail');
-      switch (event.kind) {
-        case 'serial_status':
-          if (typeof event.connected !== 'boolean' || typeof event.port !== 'string') return;
-          status.textContent = event.connected
-            ? `Serial bridge connected (${event.port})`
-            : `Serial bridge disconnected (${event.port})`;
-          detail.textContent = 'ESP32 serial telemetry forwarding status';
-          break;
-        case 'tls_handshake':
-          if (!Number.isFinite(event.latency_ms) || !Number.isFinite(event.free_heap)) return;
-          status.textContent = `TLS handshake completed in ${fmtMs(event.latency_ms)}`;
-          detail.textContent = `Free heap: ${event.free_heap.toLocaleString()} bytes`;
-          break;
-        case 'tls_failure':
-          if (typeof event.error !== 'string') return;
-          status.textContent = 'TLS connection failed';
-          detail.textContent = event.error;
-          break;
-        case 'dns_result':
-          if (typeof event.query !== 'string' || typeof event.rcode !== 'string' ||
-              typeof event.ad !== 'boolean' || typeof event.id_match !== 'boolean' ||
-              !Number.isFinite(event.latency_ms) || !Number.isFinite(event.free_heap)) return;
-          status.textContent = `${event.query}: ${event.rcode}`;
-          detail.textContent = `DNSSEC AD ${event.ad ? 'set' : 'not set'}; transaction ID ${event.id_match ? 'matched' : 'did not match'}; ${fmtMs(event.latency_ms)}; ${event.free_heap.toLocaleString()} bytes free`;
-          break;
-      }
+      if (!event || typeof event !== 'object') return;
+      if (deviceSyncing) deviceLiveBuffer.push(event);
+      else applyDeviceTelemetry(event);
     });
+    socket.on('device_telemetry_history', data => {
+      if (!data || !Array.isArray(data.events)) return;
+      resetDeviceTelemetry();
+      data.events.forEach(applyDeviceTelemetry);
+      deviceLiveBuffer.forEach(applyDeviceTelemetry);
+      deviceLiveBuffer = [];
+      deviceSyncing = false;
+    });
+  }
+
+  const DEVICE_DOMAINS = new Set([
+    'valid.aegis.test', 'bogus.aegis.test', 'insecure.aegis.test'
+  ]);
+  const deviceEventIds = new Set();
+  function resetDeviceTelemetry() {
+    deviceEventIds.clear();
+    $('deviceTelemetryStatus').textContent = 'No device telemetry received';
+    $('deviceHandshake').textContent = '–';
+    $('deviceHeap').textContent = '–';
+    $('deviceBridge').textContent = '–';
+    $('deviceLatestEvent').textContent = '–';
+    $('deviceDnsValid').textContent = 'No result yet';
+    $('deviceDnsBogus').textContent = 'No result yet';
+    $('deviceDnsInsecure').textContent = 'No result yet';
+  }
+  function applyDeviceTelemetry(event) {
+    if (!event || typeof event !== 'object' || typeof event.kind !== 'string') return;
+    if (typeof event.id === 'string') {
+      if (deviceEventIds.has(event.id)) return;
+      deviceEventIds.add(event.id);
+      if (deviceEventIds.size > 4000) {
+        deviceEventIds.delete(deviceEventIds.values().next().value);
+      }
+    }
+
+    const time = typeof event.timestamp === 'string' &&
+      !Number.isNaN(Date.parse(event.timestamp))
+      ? new Date(event.timestamp).toLocaleString() : 'time unavailable';
+    let description;
+    switch (event.kind) {
+      case 'serial_status':
+        if (typeof event.connected !== 'boolean' || typeof event.port !== 'string') return;
+        $('deviceBridge').textContent = event.connected
+          ? `Connected (${event.port})` : `Disconnected (${event.port})`;
+        description = event.connected
+          ? `Serial bridge connected on ${event.port}`
+          : `Serial bridge disconnected from ${event.port}`;
+        break;
+      case 'tls_handshake':
+        if (!Number.isFinite(event.latency_ms) || !Number.isFinite(event.free_heap)) return;
+        $('deviceHandshake').textContent = `${time} · ${fmtMs(event.latency_ms)}`;
+        $('deviceHeap').textContent = `${event.free_heap.toLocaleString()} bytes · ${time}`;
+        description = `TLS handshake completed in ${fmtMs(event.latency_ms)}`;
+        break;
+      case 'tls_failure':
+        if (typeof event.error !== 'string') return;
+        description = `TLS connection failed: ${event.error}`;
+        break;
+      case 'dns_result': {
+        if (typeof event.query !== 'string' || typeof event.rcode !== 'string' ||
+            typeof event.ad !== 'boolean' || typeof event.id_match !== 'boolean' ||
+            !Number.isFinite(event.latency_ms) || !Number.isFinite(event.free_heap)) return;
+        const domain = event.query.toLowerCase().replace(/\.$/, '');
+        if (DEVICE_DOMAINS.has(domain)) {
+          const target = domain === 'valid.aegis.test' ? 'deviceDnsValid'
+            : domain === 'bogus.aegis.test' ? 'deviceDnsBogus' : 'deviceDnsInsecure';
+          $(target).textContent = `${event.rcode} · AD=${event.ad ? 1 : 0} · ID ${event.id_match ? 'matched' : 'mismatch'} · ${fmtMs(event.latency_ms)} · ${time}`;
+        }
+        $('deviceHeap').textContent = `${event.free_heap.toLocaleString()} bytes · ${time}`;
+        description = `${event.query}: ${event.rcode}, AD=${event.ad ? 1 : 0}`;
+        break;
+      }
+      default:
+        return;
+    }
+    $('deviceTelemetryStatus').textContent = 'Device telemetry received';
+    $('deviceLatestEvent').textContent = `${description} · ${time}`;
   }
 
   function receive(raw) {

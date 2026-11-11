@@ -349,6 +349,11 @@ Accepted metrics are sent to Express at `POST /api/metrics` and
 broadcast to browsers through Socket.io as the `dns_metric` event.
 Extended DNS Error (EDE) details returned by the resolver are included in
 gateway logs and shown in the latest lookup card when present.
+The dashboard also retains the latest 2,000 device telemetry events in
+memory. They are available from `GET /api/device/telemetry` and replayed to
+browsers on Socket.IO connection, so refreshing the page restores device
+history while the dashboard process is running. Restarting the dashboard
+clears this in-memory history.
 
 Useful checks:
 
