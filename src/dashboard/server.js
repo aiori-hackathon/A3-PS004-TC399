@@ -48,6 +48,18 @@ app.post('/api/metrics', (req, res) => {
       ? Math.max(0, Math.min(100, input.cpu_percent)) : 0,
     client: typeof input.client === 'string' ? input.client.slice(0, 64) : ''
   };
+  if (input.ede_info !== undefined) {
+    if (!Array.isArray(input.ede_info) || input.ede_info.length > 8 ||
+        input.ede_info.some((ede) => !ede || typeof ede !== 'object' ||
+          Array.isArray(ede) || !Number.isInteger(ede.code) ||
+          ede.code < 0 || ede.code > 65535 || typeof ede.text !== 'string')) {
+      return res.status(400).json({ error: 'Invalid EDE metric details' });
+    }
+    metric.ede_info = input.ede_info.map((ede) => ({
+      code: ede.code,
+      text: ede.text.slice(0, 256)
+    }));
+  }
 
   metrics.push(metric);
   if (metrics.length > MAX_METRICS) metrics.shift();

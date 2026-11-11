@@ -239,6 +239,7 @@
           <dt>Answered in</dt><dd id="factLatency">–</dd>
           <dt>Gateway CPU</dt><dd id="factCpu">–</dd>
           <dt>Received</dt><dd id="factTime">–</dd>
+          <dt id="factEdeLabel" hidden>Resolver EDE</dt><dd id="factEde" hidden>–</dd>
           <dt id="factClientLabel" hidden>Device</dt><dd id="factClient" hidden>–</dd>
         </dl>
       </article>
@@ -373,6 +374,9 @@
       statusRaw: s, status: VERDICTS[s] ? s : 'ERROR',
       latency: Math.max(0, num(raw.latency_ms)),
       cpu: Math.min(100, Math.max(0, num(raw.cpu_percent))),
+      edeInfo: Array.isArray(raw.ede_info) ? raw.ede_info
+        .filter(ede => ede && Number.isInteger(ede.code) && typeof ede.text === 'string')
+        .slice(0, 8).map(ede => ({ code: ede.code, text: ede.text.slice(0, 256) })) : [],
       client: typeof raw.client === 'string' ? raw.client.slice(0, 64) : ''
     };
   }
@@ -521,6 +525,12 @@
     $('factLatency').textContent = fmtMs(e.latency);
     $('factCpu').textContent = `${e.cpu.toFixed(1)}%`;
     $('factTime').textContent = fmtTime(e.ts);
+    const edeLabel = $('factEdeLabel'), edeFact = $('factEde');
+    edeLabel.hidden = !e.edeInfo.length; edeFact.hidden = !e.edeInfo.length;
+    if (e.edeInfo.length) {
+      edeFact.textContent = e.edeInfo.map(ede =>
+        `(${ede.code})${ede.text ? ` ${ede.text}` : ''}`).join('; ');
+    }
     const hasClient = !!e.client;
     $('factClientLabel').hidden = !hasClient; $('factClient').hidden = !hasClient;
     if (hasClient) $('factClient').textContent = e.client;

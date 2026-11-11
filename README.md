@@ -320,11 +320,11 @@ docker compose --env-file .env -f src/docker-compose.yml exec resolver dig '@127
                                                               bogus
   -------------------------------------------------------------------------------
 
-These outcomes have been observed in the local lab. A `SERVFAIL` is
-**not universally proof** of a DNSSEC validation failure: real resolver
-deployments may also return it for timeouts, network errors, or
-configuration problems. The deliberately broken-signature test zone is
-used to demonstrate the bogus path.
+These outcomes have been observed in the local lab. The gateway classifies a
+`SERVFAIL` as `BOGUS` only when the resolver includes EDE code 6 (`DNSSEC
+Bogus`); other `SERVFAIL` responses are classified as `ERROR`. This avoids
+treating timeouts, network errors, or configuration problems as DNSSEC
+validation failures.
 
 ## 6. Test the Gateway and Dashboard
 
@@ -347,6 +347,8 @@ CD=1 test             REFUSED     rcode=5 AD=0
 Exact spacing and latency vary. Keep http://localhost:3000 open.
 Accepted metrics are sent to Express at `POST /api/metrics` and
 broadcast to browsers through Socket.io as the `dns_metric` event.
+Extended DNS Error (EDE) details returned by the resolver are included in
+gateway logs and shown in the latest lookup card when present.
 
 Useful checks:
 
