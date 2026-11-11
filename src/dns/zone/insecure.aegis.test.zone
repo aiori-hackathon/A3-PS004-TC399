@@ -1,7 +1,7 @@
 $ORIGIN insecure.aegis.test.
 $TTL 300
 @ IN SOA ns.insecure.aegis.test. hostmaster.insecure.aegis.test. (
-    2026102101
+    2026110901
     3600
     900
     604800
@@ -10,4 +10,4 @@ $TTL 300
 @   IN NS ns.insecure.aegis.test.
 @   IN A  192.0.2.30
 www IN A  192.0.2.31
-ns  IN A  172.28.0.10
+ns  IN A  172.29.0.10
