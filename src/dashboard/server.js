@@ -55,6 +55,68 @@ app.post('/api/metrics', (req, res) => {
   res.status(202).json({ accepted: true });
 });
 
+const validDeviceTelemetryKinds = new Set([
+  'serial_status', 'tls_handshake', 'tls_failure', 'dns_result'
+]);
+
+app.post('/api/device/telemetry', (req, res) => {
+  const input = req.body;
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return res.status(400).json({ error: 'Expected a JSON object' });
+  }
+  if (typeof input.kind !== 'string' || !validDeviceTelemetryKinds.has(input.kind)) {
+    return res.status(400).json({ error: 'Invalid device telemetry kind' });
+  }
+
+  const event = {
+    id: randomUUID(),
+    timestamp: typeof input.timestamp === 'string' && !Number.isNaN(Date.parse(input.timestamp))
+      ? input.timestamp : new Date().toISOString(),
+    kind: input.kind
+  };
+  const validLatency = Number.isFinite(input.latency_ms) && input.latency_ms >= 0;
+  const validHeap = Number.isInteger(input.free_heap) && input.free_heap >= 0;
+
+  switch (input.kind) {
+    case 'serial_status':
+      if (typeof input.connected !== 'boolean' || typeof input.port !== 'string') {
+        return res.status(400).json({ error: 'Invalid serial status fields' });
+      }
+      event.connected = input.connected;
+      event.port = input.port.slice(0, 64);
+      break;
+    case 'tls_handshake':
+      if (!validLatency || !validHeap) {
+        return res.status(400).json({ error: 'Invalid TLS handshake fields' });
+      }
+      event.latency_ms = input.latency_ms;
+      event.free_heap = input.free_heap;
+      break;
+    case 'tls_failure':
+      if (typeof input.error !== 'string') {
+        return res.status(400).json({ error: 'Invalid TLS failure fields' });
+      }
+      event.error = input.error.slice(0, 200);
+      break;
+    case 'dns_result':
+      if (typeof input.query !== 'string' || typeof input.rcode !== 'string' ||
+          typeof input.ad !== 'boolean' || typeof input.id_match !== 'boolean' ||
+          !validLatency || !validHeap) {
+        return res.status(400).json({ error: 'Invalid DNS result fields' });
+      }
+      event.query = input.query.slice(0, 253);
+      event.rcode = input.rcode.slice(0, 20);
+      event.ad = input.ad;
+      event.id_match = input.id_match;
+      event.latency_ms = input.latency_ms;
+      event.free_heap = input.free_heap;
+      break;
+  }
+
+  io.emit('device_telemetry', event);
+  res.status(202).json({ accepted: true });
+});
+
 io.on('connection', (socket) => {
   console.log(`[Dashboard] Browser connected: ${socket.id}`);
   socket.on('disconnect', () => console.log(`[Dashboard] Browser disconnected: ${socket.id}`));

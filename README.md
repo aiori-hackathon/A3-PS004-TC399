@@ -682,22 +682,22 @@ Update it only when a task has actually been completed and verified.
     across four consecutive rounds.
 -   [x] Capture initial TLS handshake latency, query latency, transaction
     ID match, and free-heap readings in the serial output.
+-   [x] Run at least 30–50 consecutive rounds and save the complete
+    serial output for extended evaluation.
+-   [x] Calculate mean, median, minimum, maximum, and p95 query latency
+    from the extended sample set.
+-   [x] Confirm hostname verification and test the no-plaintext-fallback
+    failure path on hardware.
+-   [x] Test rejection of an untrusted gateway certificate and an
+    invalid client certificate.
+-   [x] Confirm ESP32 test requests appear on the live dashboard.
+-   [x] Persist structured events to JSONL/CSV for repeatable
+    evaluation.
+-   [x] Improve classification of resolver errors versus DNSSEC-bogus
+    outcomes.
 
 ### Pending milestones
 
--   [ ] Run at least 30–50 consecutive rounds and save the complete
-    serial output for extended evaluation.
--   [ ] Calculate mean, median, minimum, maximum, and p95 query latency
-    from the extended sample set.
--   [ ] Confirm hostname verification and test the no-plaintext-fallback
-    failure path on hardware.
--   [ ] Test rejection of an untrusted gateway certificate and an
-    invalid client certificate.
--   [ ] Confirm ESP32 test requests appear on the live dashboard.
--   [ ] Persist structured events to JSONL/CSV for repeatable
-    evaluation.
--   [ ] Improve classification of resolver errors versus DNSSEC-bogus
-    outcomes.
 -   [ ] Add automated unit and integration tests for authentication,
     malformed requests, resolver failures, timeouts, and validation
     outcomes.

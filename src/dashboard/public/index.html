@@ -263,6 +263,14 @@
     </div>
   </section>
 
+  <section aria-labelledby="deviceTelemetryTitle" style="border-top:1px solid var(--rule)">
+    <div class="section-head">
+      <h2 id="deviceTelemetryTitle">ESP32 telemetry</h2>
+      <p id="deviceTelemetryStatus" role="status" aria-live="polite">Waiting for device telemetry</p>
+    </div>
+    <p id="deviceTelemetryDetail" class="path-lede">The latest serial bridge event will appear here.</p>
+  </section>
+
   <section class="tally-wrap" aria-labelledby="tallyTitle">
     <div class="section-head"><h2 id="tallyTitle">Recent outcomes</h2><p id="tallyTotal">0 lookups</p></div>
     <ul class="tally" id="tally"></ul>
@@ -422,6 +430,38 @@
       if (!m || typeof m !== 'object') return;
       if (syncing) liveBuffer.push(m);
       else receive(m);
+    });
+    socket.on('device_telemetry', event => {
+      if (!event || typeof event !== 'object' || typeof event.kind !== 'string') return;
+
+      const status = $('deviceTelemetryStatus');
+      const detail = $('deviceTelemetryDetail');
+      switch (event.kind) {
+        case 'serial_status':
+          if (typeof event.connected !== 'boolean' || typeof event.port !== 'string') return;
+          status.textContent = event.connected
+            ? `Serial bridge connected (${event.port})`
+            : `Serial bridge disconnected (${event.port})`;
+          detail.textContent = 'ESP32 serial telemetry forwarding status';
+          break;
+        case 'tls_handshake':
+          if (!Number.isFinite(event.latency_ms) || !Number.isFinite(event.free_heap)) return;
+          status.textContent = `TLS handshake completed in ${fmtMs(event.latency_ms)}`;
+          detail.textContent = `Free heap: ${event.free_heap.toLocaleString()} bytes`;
+          break;
+        case 'tls_failure':
+          if (typeof event.error !== 'string') return;
+          status.textContent = 'TLS connection failed';
+          detail.textContent = event.error;
+          break;
+        case 'dns_result':
+          if (typeof event.query !== 'string' || typeof event.rcode !== 'string' ||
+              typeof event.ad !== 'boolean' || typeof event.id_match !== 'boolean' ||
+              !Number.isFinite(event.latency_ms) || !Number.isFinite(event.free_heap)) return;
+          status.textContent = `${event.query}: ${event.rcode}`;
+          detail.textContent = `DNSSEC AD ${event.ad ? 'set' : 'not set'}; transaction ID ${event.id_match ? 'matched' : 'did not match'}; ${fmtMs(event.latency_ms)}; ${event.free_heap.toLocaleString()} bytes free`;
+          break;
+      }
     });
   }
 
