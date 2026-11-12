@@ -9,7 +9,13 @@ type Filter = 'ALL' | GatewayStatus;
 const Row = memo(function Row({ m, onOpen }: { m: GatewayMetric; onOpen: (m: GatewayMetric) => void }) {
   const hex = OUTCOME_META[m.status].hex;
   return (
-    <tr tabIndex={0} onClick={() => onOpen(m)} onKeyDown={(e) => e.key === 'Enter' && onOpen(m)}
+    <tr tabIndex={0} aria-label={`Open ${nameOf(m.query)} lookup details`} onClick={() => onOpen(m)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onOpen(m);
+          }
+        }}
         className={`cursor-pointer border-b border-line hover:bg-panel2 ${m.live ? 'row-flash' : ''}`} style={{ '--flash': `${hex}38` } as React.CSSProperties}>
       <td className="whitespace-nowrap px-2.5 py-1.5 font-mono text-faint">{fmtClock(m.ts)}</td>
       <td className="px-2.5"><Badge status={m.status} /></td>
@@ -53,7 +59,7 @@ export function LogTable({ metrics, all, onClear, notify }: { metrics: GatewayMe
   };
 
   return (
-    <section className="panel" aria-label="Lookup log">
+    <section id="queries" className="panel scroll-mt-24" aria-label="Lookup log">
       <h2 className="h2">Lookup log <span>{Math.min(limit, rows.length)} of {rows.length} shown · {all.length} retained · click a row for details</span></h2>
       <div className="mb-2.5 flex flex-wrap items-center gap-2">
         <div role="group" aria-label="Filter by verdict" className="flex flex-wrap gap-1.5">
@@ -65,7 +71,9 @@ export function LogTable({ metrics, all, onClear, notify }: { metrics: GatewayMe
         </div>
         <span className="flex-1" />
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter name, client, type" aria-label="Filter log" className="w-full min-w-0 rounded-md border border-line bg-bg px-2.5 py-1.5 sm:w-56" />
-        <button className="btn" onClick={csv}>CSV</button><button className="btn" onClick={jsonl}>JSONL</button><button className="btn" onClick={onClear}>Clear view</button>
+        <button className="btn" onClick={csv}>CSV</button>
+        <button className="btn" onClick={jsonl}>JSONL</button>
+        <button className="btn" onClick={onClear} title="Clear dashboard history only; server history is kept">Clear view</button>
       </div>
       <div className="max-h-[440px] overflow-auto rounded-[5px] border border-line">
         <table className="w-full min-w-[860px] text-xs">

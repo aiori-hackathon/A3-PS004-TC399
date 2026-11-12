@@ -7,12 +7,14 @@
   :focus-visible { outline: 2px solid #7dd3fc; outline-offset: 2px; }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: #1d2835; border-radius: 4px; }
+  html { scroll-behavior: smooth; }
 }
 @layer components {
   .panel { @apply min-w-0 rounded-md border border-line bg-panel p-3.5; }
   .h2 { @apply mb-2.5 flex items-baseline justify-between gap-3 text-xs font-semibold text-mute; }
   .h2 > span { @apply font-normal text-faint; }
   .btn { @apply rounded-md border border-line bg-panel px-3 py-1.5 transition-colors hover:border-faint active:scale-[.98]; }
+  .skip-link { @apply fixed left-3 top-3 z-50 -translate-y-20 rounded-md bg-accent px-3 py-2 font-semibold text-[#04121c] transition-transform focus:translate-y-0; }
 }
 @keyframes rowflash { from { background: var(--flash); } to { background: transparent; } }
 @keyframes slidein { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -20,4 +22,6 @@
 .row-flash > td { animation: rowflash 1.4s ease-out; }
 .drawer { animation: slidein .18s ease-out; }
 .live-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  *, html { animation: none !important; scroll-behavior: auto !important; transition: none !important; }
+}

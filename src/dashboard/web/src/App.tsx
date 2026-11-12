@@ -41,9 +41,12 @@ function Dashboard() {
   const feedUi = { live: ['#3ddc97', paused ? 'Paused' : 'Live'], connecting: ['#f5b942', 'Connecting'], offline: ['#ff5c6c', 'Feed lost, retrying'] }[feed];
   const devFresh = device[0] && now - device[0].ts < 90_000;
   const s = Math.floor((now - start) / 1000), p = (x: number) => String(x).padStart(2, '0');
+  const windowLabel = win === 'all' ? 'all available' : WINDOWS.find(([key]) => key === win)?.[1] ?? 'all available';
+  const lastLookupAge = metrics[0] ? Math.max(0, Math.floor((now - metrics[0].ts) / 1000)) : null;
 
   return (
     <div className="min-h-screen">
+      <a href="#main-content" className="skip-link">Skip to dashboard</a>
       <header className="sticky top-0 z-30 border-b border-line bg-bg/90 backdrop-blur">
         <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-3.5 px-4 py-2">
           <div className="mr-auto flex items-center gap-2 text-base font-bold">
@@ -55,7 +58,7 @@ function Dashboard() {
           <span className="inline-flex items-center gap-2 rounded-full border border-line bg-panel px-2.5 py-0.5 text-xs text-mute">
             <i className="h-2 w-2 rounded-full" style={{ background: device.length ? (devFresh ? '#3ddc97' : '#f5b942') : '#5d6e82' }} />ESP32: {device.length ? (devFresh ? 'reporting' : 'idle') : 'no telemetry'}
           </span>
-          <span className="font-mono text-faint">{p((s / 3600) | 0)}:{p(((s / 60) | 0) % 60)}:{p(s % 60)}</span>
+          <span className="font-mono text-faint" aria-label="Session duration">{p((s / 3600) | 0)}:{p(((s / 60) | 0) % 60)}:{p(s % 60)}</span>
           <div className="inline-flex overflow-hidden rounded-md border border-line" role="group" aria-label="Time window">
             {WINDOWS.map(([k, l]) => <button key={k} aria-pressed={win === k} onClick={() => setWin(k)} className={`border-l border-line px-3 py-1 first:border-0 transition-colors ${win === k ? 'bg-accent font-semibold text-[#04121c]' : 'bg-panel text-mute hover:text-ink'}`}>{l}</button>)}
           </div>
@@ -63,8 +66,32 @@ function Dashboard() {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-[1500px] gap-3 px-4 pb-10 pt-3.5">
-        <section aria-label="Key figures" className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <main id="main-content" tabIndex={-1} className="mx-auto grid max-w-[1500px] gap-4 px-4 pb-10 pt-6">
+        <section className="flex flex-col justify-between gap-4 border-b border-line pb-4 sm:flex-row sm:items-end">
+          <div>
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">DNS security monitor</p>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Dashboard</h1>
+            <p className="mt-1 text-sm text-mute">Live DNSSEC verdicts, gateway health, and device telemetry.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-faint">
+            <span>Showing <b className="font-medium text-ink">{windowLabel.toLowerCase()}</b> · {n.toLocaleString()} lookups</span>
+            <span>{lastLookupAge == null ? 'Waiting for first lookup' : `Last lookup ${lastLookupAge < 60 ? `${lastLookupAge}s ago` : `${Math.floor(lastLookupAge / 60)}m ago`}`}</span>
+          </div>
+        </section>
+
+        {feed === 'offline' && (
+          <div role="alert" className="rounded-md border border-[#ff5c6c]/50 bg-[#ff5c6c]/10 px-3.5 py-2.5 text-sm text-ink">
+            <b className="text-[#ff7b88]">Connection interrupted.</b> The dashboard is retrying; new gateway events may be delayed.
+          </div>
+        )}
+
+        <nav aria-label="Dashboard sections" className="flex flex-wrap gap-2 text-xs">
+          {[['#overview', 'Overview'], ['#activity', 'Activity'], ['#events', 'Security & device'], ['#queries', 'Lookup log']].map(([href, label]) => (
+            <a key={href} href={href} className="rounded-full border border-line bg-panel px-3 py-1.5 text-mute transition-colors hover:border-accent hover:text-ink">{label}</a>
+          ))}
+        </nav>
+
+        <section id="overview" aria-label="Key figures" className="grid scroll-mt-24 grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <Kpi label="Lookups" value={n.toLocaleString()} sub={mins > 0.1 ? `${(n / mins).toFixed(1)} per min` : 'in window'} />
           <Kpi label="Secure rate" value={n ? `${Math.round((counts.SECURE / n) * 100)}%` : '–'} sub={`${counts.SECURE} SECURE · ${counts.INSECURE} INSECURE`} hex={OUTCOME_META.SECURE.hex} />
           <Kpi label="Threats stopped" value={String(threats)} sub={`${counts.BOGUS} BOGUS · ${counts.BLOCKED_CD} CD=1`} hex={threats ? OUTCOME_META.BOGUS.hex : OUTCOME_META.SECURE.hex} hot={threats > 0} />
@@ -73,7 +100,7 @@ function Dashboard() {
           <Kpi label="Gateway CPU" value={metrics[0] ? `${metrics[0].cpu_percent.toFixed(1)}%` : '–'} sub="latest sample" />
         </section>
 
-        <div className="grid gap-3 lg:grid-cols-[5fr_7fr]">
+        <div id="activity" className="grid scroll-mt-24 gap-3 lg:grid-cols-[5fr_7fr]">
           <LatestLookup latest={metrics[0]} counts={counts} total={n} />
           <section className="panel">
             <h2 className="h2">Response time per lookup <span>last 80 · dashed = p95</span></h2>
@@ -83,7 +110,7 @@ function Dashboard() {
           </section>
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-3">
+        <div id="events" className="grid scroll-mt-24 gap-3 lg:grid-cols-3">
           <SecurityEvents metrics={view} device={device} />
           <DevicePanel device={device} />
           <TopTable metrics={view} />
