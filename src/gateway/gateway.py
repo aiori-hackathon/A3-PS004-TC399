@@ -35,6 +35,7 @@ CLIENT_CA = os.getenv("CLIENT_CA", "certs/rootCA.crt")
 MAX_DNS_MESSAGE = 65535
 MAX_EDE_OPTIONS = 8
 MAX_EDE_TEXT = 256
+RESOLVER_TIMEOUT = 3.0
 
 
 def extract_ede_info(response: dns.message.Message) -> list[dict]:
@@ -191,8 +192,28 @@ async def process_query(
                 upstream_query,
                 RESOLVER_HOST,
                 port=RESOLVER_PORT,
-                timeout=3.0,
+                timeout=RESOLVER_TIMEOUT,
             )
+            if upstream.flags & dns.flags.TC:
+                print(
+                    f"[DNS] Truncated UDP response for {qname}; retrying over TCP",
+                    flush=True,
+                )
+                upstream = await dns.asyncquery.tcp(
+                    upstream_query,
+                    RESOLVER_HOST,
+                    port=RESOLVER_PORT,
+                    timeout=RESOLVER_TIMEOUT,
+                )
+                if upstream.flags & dns.flags.TC:
+                    status = "ERROR"
+                    print(
+                        f"[DNS] Truncated TCP response for {qname}",
+                        flush=True,
+                    )
+                    return error_response(
+                        query, dns.rcode.SERVFAIL
+                    ).to_wire()
 
         except (dns.exception.Timeout, OSError) as exc:
             status = "ERROR"
