@@ -83,18 +83,36 @@ class ProcessPolicyTests(unittest.TestCase):
 
 
 class ProcessQueryTests(unittest.IsolatedAsyncioTestCase):
-    async def run_query(self, query_wire: bytes, resolver_side_effect=None):
+    async def run_query(
+        self,
+        query_wire: bytes,
+        resolver_side_effect=None,
+        tcp_side_effect=None,
+    ):
         published = []
 
         async def record_metric(_session, payload):
             published.append(payload)
 
+        def resolver_mock(result):
+            if isinstance(result, BaseException) or (
+                isinstance(result, type)
+                and issubclass(result, BaseException)
+            ):
+                return AsyncMock(side_effect=result)
+            return AsyncMock(return_value=result)
+
         with (
             patch.object(
                 gateway.dns.asyncquery,
                 "udp",
-                new=AsyncMock(side_effect=resolver_side_effect),
+                new=resolver_mock(resolver_side_effect),
             ) as resolver_query,
+            patch.object(
+                gateway.dns.asyncquery,
+                "tcp",
+                new=resolver_mock(tcp_side_effect),
+            ) as tcp_query,
             patch.object(gateway, "publish_metrics", new=record_metric),
             patch.object(gateway, "cpu_percent", return_value=0.0),
         ):
@@ -104,20 +122,23 @@ class ProcessQueryTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0)
 
         self.assertEqual(len(published), 1)
-        return response_wire, published[0], resolver_query
+        return response_wire, published[0], resolver_query, tcp_query
 
     async def test_malformed_packet_is_rejected(self):
-        response_wire, metric, resolver_query = await self.run_query(b"\x00")
+        response_wire, metric, resolver_query, tcp_query = await self.run_query(
+            b"\x00"
+        )
 
         self.assertEqual(response_wire, b"")
         self.assertEqual(metric["status"], "ERROR")
         resolver_query.assert_not_awaited()
+        tcp_query.assert_not_awaited()
 
     async def test_cd_query_is_refused_without_resolver_request(self):
         query = dns.message.make_query("example.test.", "A")
         query.flags |= dns.flags.CD
 
-        response_wire, metric, resolver_query = await self.run_query(
+        response_wire, metric, resolver_query, tcp_query = await self.run_query(
             query.to_wire()
         )
 
@@ -125,11 +146,12 @@ class ProcessQueryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.rcode(), dns.rcode.REFUSED)
         self.assertEqual(metric["status"], "BLOCKED_CD")
         resolver_query.assert_not_awaited()
+        tcp_query.assert_not_awaited()
 
     async def test_resolver_timeout_returns_servfail_and_records_error(self):
         query = dns.message.make_query("example.test.", "A")
 
-        response_wire, metric, resolver_query = await self.run_query(
+        response_wire, metric, resolver_query, tcp_query = await self.run_query(
             query.to_wire(), resolver_side_effect=dns.exception.Timeout
         )
 
@@ -137,6 +159,70 @@ class ProcessQueryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.rcode(), dns.rcode.SERVFAIL)
         self.assertEqual(metric["status"], "ERROR")
         resolver_query.assert_awaited_once()
+        tcp_query.assert_not_awaited()
+
+    async def test_truncated_udp_retries_over_tcp_with_timeout(self):
+        query = dns.message.make_query("example.test.", "A")
+        _, truncated = make_response(dns.rcode.NOERROR)
+        truncated.flags |= dns.flags.TC
+        _, tcp_response = make_response(
+            dns.rcode.NOERROR, authenticated=True
+        )
+
+        response_wire, metric, udp_query, tcp_query = await self.run_query(
+            query.to_wire(),
+            resolver_side_effect=truncated,
+            tcp_side_effect=tcp_response,
+        )
+
+        response = dns.message.from_wire(response_wire)
+        self.assertEqual(response.flags & dns.flags.TC, 0)
+        self.assertTrue(response.flags & dns.flags.AD)
+        self.assertEqual(metric["status"], "SECURE")
+        udp_query.assert_awaited_once()
+        tcp_query.assert_awaited_once()
+        self.assertIs(
+            udp_query.await_args.args[0],
+            tcp_query.await_args.args[0],
+        )
+        self.assertEqual(tcp_query.await_args.kwargs["timeout"], 3.0)
+
+    async def test_tcp_retry_failure_returns_error_not_truncated_verdict(self):
+        query = dns.message.make_query("example.test.", "A")
+        _, truncated = make_response(
+            dns.rcode.NOERROR, authenticated=True
+        )
+        truncated.flags |= dns.flags.TC
+
+        response_wire, metric, _, tcp_query = await self.run_query(
+            query.to_wire(),
+            resolver_side_effect=truncated,
+            tcp_side_effect=dns.exception.Timeout,
+        )
+
+        response = dns.message.from_wire(response_wire)
+        self.assertEqual(response.rcode(), dns.rcode.SERVFAIL)
+        self.assertFalse(response.flags & dns.flags.AD)
+        self.assertEqual(metric["status"], "ERROR")
+        tcp_query.assert_awaited_once()
+
+    async def test_truncated_tcp_response_returns_error(self):
+        query = dns.message.make_query("example.test.", "A")
+        _, truncated = make_response(
+            dns.rcode.NOERROR, authenticated=True
+        )
+        truncated.flags |= dns.flags.TC
+
+        response_wire, metric, _, _ = await self.run_query(
+            query.to_wire(),
+            resolver_side_effect=truncated,
+            tcp_side_effect=truncated,
+        )
+
+        response = dns.message.from_wire(response_wire)
+        self.assertEqual(response.rcode(), dns.rcode.SERVFAIL)
+        self.assertFalse(response.flags & dns.flags.AD)
+        self.assertEqual(metric["status"], "ERROR")
 
 
 if __name__ == "__main__":
