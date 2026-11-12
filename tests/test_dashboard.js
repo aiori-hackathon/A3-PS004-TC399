@@ -6,6 +6,9 @@ const test = require('node:test');
 const originalLoad = Module._load;
 const routes = new Map();
 const emitted = [];
+const DASHBOARD_API_TOKEN = 'dashboard-test-token';
+const originalDashboardToken = process.env.DASHBOARD_API_TOKEN;
+process.env.DASHBOARD_API_TOKEN = DASHBOARD_API_TOKEN;
 const app = {
   disable() {},
   use() {},
@@ -14,8 +17,8 @@ const app = {
       routes.set(`GET ${pathname}`, handler);
     }
   },
-  post(route, handler) {
-    routes.set(`POST ${route}`, handler);
+  post(route, ...handlers) {
+    routes.set(`POST ${route}`, handlers);
   },
 };
 const express = () => app;
@@ -42,27 +45,74 @@ try {
   require(path.join(__dirname, '..', 'src', 'dashboard', 'server.js'));
 } finally {
   Module._load = originalLoad;
+  if (originalDashboardToken === undefined) {
+    delete process.env.DASHBOARD_API_TOKEN;
+  } else {
+    process.env.DASHBOARD_API_TOKEN = originalDashboardToken;
+  }
 }
 
-function request(method, pathname, body) {
+function request(
+  method,
+  pathname,
+  body,
+  headers = { 'x-dashboard-token': DASHBOARD_API_TOKEN },
+) {
   const result = {};
-  const handler = routes.get(`${method} ${pathname}`);
-  assert.ok(handler, `missing route ${method} ${pathname}`);
-  handler(
-    { body },
-    {
-      status(code) {
-        result.status = code;
-        return this;
-      },
-      json(value) {
-        result.body = value;
-        return this;
-      },
+  const handlers = routes.get(`${method} ${pathname}`);
+  assert.ok(handlers, `missing route ${method} ${pathname}`);
+  const req = {
+    body,
+    get(name) {
+      return headers[name.toLowerCase()];
     },
-  );
+  };
+  const res = {
+    status(code) {
+      result.status = code;
+      return this;
+    },
+    json(value) {
+      result.body = value;
+      return this;
+    },
+  };
+  for (const handler of Array.isArray(handlers) ? handlers : [handlers]) {
+    let nextCalled = false;
+    handler(req, res, () => {
+      nextCalled = true;
+    });
+    if (!nextCalled) break;
+  }
   return result;
 }
+
+test('requires the shared token on both write endpoints', () => {
+  const metric = {
+    query: 'valid.aegis.test',
+    status: 'SECURE',
+  };
+  const telemetry = {
+    kind: 'tls_handshake',
+    latency_ms: 120,
+    free_heap: 32000,
+  };
+
+  for (const [pathname, body] of [
+    ['/api/metrics', metric],
+    ['/api/device/telemetry', telemetry],
+  ]) {
+    const emittedCount = emitted.length;
+    assert.equal(request('POST', pathname, body, {}).status, 401);
+    assert.equal(
+      request('POST', pathname, body, {
+        'x-dashboard-token': 'wrong-token',
+      }).status,
+      401,
+    );
+    assert.equal(emitted.length, emittedCount);
+  }
+});
 
 test('accepts and broadcasts a valid gateway metric', () => {
   const response = request('POST', '/api/metrics', {

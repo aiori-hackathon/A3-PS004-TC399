@@ -37,6 +37,11 @@ the host dashboard port. The current Docker bridge subnet is
 at `172.29.0.20`, gateway at `172.29.0.30`, and dashboard at
 `172.29.0.40`.
 
+The dashboard's `POST /api/metrics` and `POST /api/device/telemetry`
+endpoints require the shared `X-Dashboard-Token` header. Configure the same
+random `DASHBOARD_API_TOKEN` in `.env` for the dashboard and gateway; set it
+in the host environment before running the serial bridge.
+
 ### Start the project
 
 Run these PowerShell commands from the repository root (the folder

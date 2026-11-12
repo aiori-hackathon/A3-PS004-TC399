@@ -4,6 +4,7 @@ import argparse
 import importlib
 import json
 import logging
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -49,12 +50,18 @@ def parse_serial_line(line: str) -> dict | None:
 
 
 def post_event(dashboard_url: str, event: dict) -> None:
+    dashboard_token = os.getenv("DASHBOARD_API_TOKEN", "")
+    if not dashboard_token:
+        raise RuntimeError("DASHBOARD_API_TOKEN must be configured")
     payload = dict(event)
     payload["timestamp"] = datetime.now(timezone.utc).isoformat()
     request = Request(
         f"{dashboard_url.rstrip('/')}/api/device/telemetry",
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "X-Dashboard-Token": dashboard_token,
+        },
         method="POST",
     )
     with urlopen(request, timeout=2) as response:

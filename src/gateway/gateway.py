@@ -29,6 +29,7 @@ PORT = 853
 RESOLVER_HOST = os.getenv("RESOLVER_HOST", "127.0.0.1")
 RESOLVER_PORT = int(os.getenv("RESOLVER_PORT", "53"))
 METRICS_URL = os.getenv("METRICS_URL", "http://localhost:3000/api/metrics")
+DASHBOARD_API_TOKEN = os.getenv("DASHBOARD_API_TOKEN", "")
 TLS_CERT = os.getenv("TLS_CERT", "certs/server.crt")
 TLS_KEY = os.getenv("TLS_KEY", "certs/server.key")
 CLIENT_CA = os.getenv("CLIENT_CA", "certs/rootCA.crt")
@@ -112,7 +113,10 @@ async def publish_metrics(
     try:
         timeout = aiohttp.ClientTimeout(total=2.0)
         async with session.post(
-            METRICS_URL, json=payload, timeout=timeout
+            METRICS_URL,
+            json=payload,
+            timeout=timeout,
+            headers={"X-Dashboard-Token": DASHBOARD_API_TOKEN},
         ) as response:
             if response.status >= 400:
                 print(

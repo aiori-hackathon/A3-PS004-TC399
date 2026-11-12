@@ -57,6 +57,7 @@ services:
       RESOLVER_HOST: "172.29.0.20"
       RESOLVER_PORT: "53"
       METRICS_URL: "http://dashboard:3000/api/metrics"
+      DASHBOARD_API_TOKEN: ${DASHBOARD_API_TOKEN:?Set DASHBOARD_API_TOKEN in .env}
       TLS_CERT: "/app/certs/server.crt"
       TLS_KEY: "/app/certs/server.key"
       CLIENT_CA: "/app/certs/rootCA.crt"
@@ -77,6 +78,8 @@ services:
     build:
       context: ./dashboard
     restart: unless-stopped
+    environment:
+      DASHBOARD_API_TOKEN: ${DASHBOARD_API_TOKEN:?Set DASHBOARD_API_TOKEN in .env}
     ports:
       - "127.0.0.1:3001:3000"
     networks:

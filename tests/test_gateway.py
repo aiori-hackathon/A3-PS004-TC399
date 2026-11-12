@@ -82,6 +82,32 @@ class ProcessPolicyTests(unittest.TestCase):
         self.assertFalse(response.flags & dns.flags.AD)
 
 
+class PublishMetricsTests(unittest.IsolatedAsyncioTestCase):
+    async def test_publish_metrics_sends_shared_dashboard_token(self):
+        class ResponseContext:
+            status = 202
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc_value, traceback):
+                return False
+
+        class SessionStub:
+            def post(self, *_args, **kwargs):
+                self.kwargs = kwargs
+                return ResponseContext()
+
+        session = SessionStub()
+        with patch.object(gateway, "DASHBOARD_API_TOKEN", "test-token"):
+            await gateway.publish_metrics(session, {})
+
+        self.assertEqual(
+            session.kwargs["headers"],
+            {"X-Dashboard-Token": "test-token"},
+        )
+
+
 class ProcessQueryTests(unittest.IsolatedAsyncioTestCase):
     async def run_query(
         self,

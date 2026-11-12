@@ -19,6 +19,17 @@ if (-not (Test-Path .env)) {
 
 If `.env` already exists, keep it and do not overwrite it. Review its settings if the gateway or local environment needs configuration.
 
+Set `DASHBOARD_API_TOKEN` in `.env` to a random secret before starting the
+stack. Generate one with:
+
+```powershell
+py -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Copy the output into `.env` as `DASHBOARD_API_TOKEN=<generated-value>`.
+The dashboard requires this value for both write APIs; the gateway and
+serial bridge must use the same token.
+
 ### 1.2 Generate development certificates
 
 Run this the first time, or when renewing/recreating the local certificate set:
@@ -212,6 +223,7 @@ first; only one program can use the ESP32 serial port at a time.
 ```powershell
 py -m pip install -r requirements.txt
 pio device list
+$env:DASHBOARD_API_TOKEN = (Get-Content .env | Where-Object { $_ -like 'DASHBOARD_API_TOKEN=*' }) -replace '^DASHBOARD_API_TOKEN=', ''
 py src\tools\serial_to_dashboard.py --port COM13
 ```
 

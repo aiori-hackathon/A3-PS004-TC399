@@ -1,7 +1,7 @@
 const express = require('express');
 const http = require('http');
 const path = require('path');
-const { randomUUID } = require('crypto');
+const { randomUUID, timingSafeEqual } = require('crypto');
 const { Server } = require('socket.io');
 
 const app = express();
@@ -10,6 +10,8 @@ const io = new Server(server);
 const PORT = Number(process.env.PORT || 3000);
 const MAX_METRICS = 2000;
 const MAX_DEVICE_TELEMETRY = 2000;
+const DASHBOARD_API_TOKEN = process.env.DASHBOARD_API_TOKEN || '';
+const DASHBOARD_TOKEN_HEADER = 'x-dashboard-token';
 const metrics = [];
 const deviceTelemetry = [];
 
@@ -29,11 +31,22 @@ app.get('/api/device/telemetry', (_req, res) => {
   res.json({ events: deviceTelemetry });
 });
 
+function authenticateDashboardRequest(req, res, next) {
+  const providedToken = req.get(DASHBOARD_TOKEN_HEADER) || '';
+  const expected = Buffer.from(DASHBOARD_API_TOKEN, 'utf8');
+  const provided = Buffer.from(providedToken, 'utf8');
+  if (!DASHBOARD_API_TOKEN || provided.length !== expected.length ||
+      !timingSafeEqual(provided, expected)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
+
 const validStatuses = new Set([
   'SECURE', 'INSECURE', 'BOGUS', 'ERROR', 'BLOCKED_CD'
 ]);
 
-app.post('/api/metrics', (req, res) => {
+app.post('/api/metrics', authenticateDashboardRequest, (req, res) => {
   const input = req.body;
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return res.status(400).json({ error: 'Expected a JSON object' });
@@ -77,7 +90,7 @@ const validDeviceTelemetryKinds = new Set([
   'serial_status', 'tls_handshake', 'tls_failure', 'dns_result'
 ]);
 
-app.post('/api/device/telemetry', (req, res) => {
+function receiveDeviceTelemetry(req, res) {
   const input = req.body;
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return res.status(400).json({ error: 'Expected a JSON object' });
@@ -135,7 +148,13 @@ app.post('/api/device/telemetry', (req, res) => {
   if (deviceTelemetry.length > MAX_DEVICE_TELEMETRY) deviceTelemetry.shift();
   io.emit('device_telemetry', event);
   res.status(202).json({ accepted: true });
-});
+}
+
+app.post(
+  '/api/device/telemetry',
+  authenticateDashboardRequest,
+  receiveDeviceTelemetry,
+);
 
 io.on('connection', (socket) => {
   console.log(`[Dashboard] Browser connected: ${socket.id}`);
