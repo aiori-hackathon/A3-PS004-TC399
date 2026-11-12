@@ -1,5 +1,5 @@
-/** Exact status values accepted and returned by the existing AegisDNS API. */
 export type GatewayStatus = 'SECURE' | 'INSECURE' | 'BOGUS' | 'ERROR' | 'BLOCKED_CD';
+export interface EdeInfo { code: number; text: string }
 
 export interface GatewayMetric {
   id: string;
@@ -10,15 +10,28 @@ export interface GatewayMetric {
   latency_ms: number;
   cpu_percent: number;
   client: string;
+  ede_info?: EdeInfo[];
+  /** Parsed timestamp (client side). */
+  ts: number;
+  /** True when received live after the initial history load (used for the row flash). */
+  live?: boolean;
 }
 
-export type ApiStatus = 'connecting' | 'online' | 'offline';
-
-export interface MetricsState {
-  apiStatus: ApiStatus;
-  metrics: GatewayMetric[];
-  /** The newly observed metric; set only after initial history sync, for animation. */
-  livePulse: GatewayMetric | null;
-  lastSuccessfulFetchAt: number | null;
-  metricsError: string | null;
+export interface DeviceEvent {
+  id: string;
+  timestamp: string;
+  ts: number;
+  kind: 'serial_status' | 'tls_handshake' | 'tls_failure' | 'dns_result';
+  connected?: boolean;
+  port?: string;
+  latency_ms?: number;
+  free_heap?: number;
+  error?: string;
+  query?: string;
+  rcode?: string;
+  ad?: boolean;
+  id_match?: boolean;
 }
+
+export type FeedStatus = 'connecting' | 'live' | 'offline';
+export type TimeWindow = 'all' | '5m' | '1h';
