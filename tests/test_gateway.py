@@ -124,6 +124,26 @@ class ProcessQueryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(published), 1)
         return response_wire, published[0], resolver_query, tcp_query
 
+    async def test_cpu_sampler_is_primed_before_measurement_interval(self):
+        with (
+            patch.object(gateway.psutil, "cpu_percent") as cpu_percent,
+            patch.object(
+                gateway.asyncio, "sleep", new=AsyncMock()
+            ) as sleep,
+        ):
+            await gateway.prime_cpu_percent()
+
+        cpu_percent.assert_called_once_with(interval=None)
+        sleep.assert_awaited_once_with(gateway.CPU_PERCENT_INTERVAL)
+
+    def test_cpu_percent_uses_module_sampler(self):
+        with patch.object(
+            gateway.psutil, "cpu_percent", return_value=17.5
+        ) as cpu_percent:
+            self.assertEqual(gateway.cpu_percent(), 17.5)
+
+        cpu_percent.assert_called_once_with(interval=None)
+
     async def test_malformed_packet_is_rejected(self):
         response_wire, metric, resolver_query, tcp_query = await self.run_query(
             b"\x00"

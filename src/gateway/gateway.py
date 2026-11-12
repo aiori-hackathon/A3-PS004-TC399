@@ -36,6 +36,7 @@ MAX_DNS_MESSAGE = 65535
 MAX_EDE_OPTIONS = 8
 MAX_EDE_TEXT = 256
 RESOLVER_TIMEOUT = 3.0
+CPU_PERCENT_INTERVAL = 0.1
 
 
 def extract_ede_info(response: dns.message.Message) -> list[dict]:
@@ -123,7 +124,12 @@ async def publish_metrics(
 
 
 def cpu_percent() -> float:
-    return float(psutil.Process().cpu_percent(interval=None))
+    return float(psutil.cpu_percent(interval=None))
+
+
+async def prime_cpu_percent() -> None:
+    psutil.cpu_percent(interval=None)
+    await asyncio.sleep(CPU_PERCENT_INTERVAL)
 
 
 async def process_query(
@@ -335,6 +341,7 @@ async def main() -> None:
 
     connector = aiohttp.TCPConnector(limit=100)
     async with aiohttp.ClientSession(connector=connector) as session:
+        await prime_cpu_percent()
         server = await asyncio.start_server(
             lambda reader, writer: handle_client(reader, writer, session),
             host=HOST,
