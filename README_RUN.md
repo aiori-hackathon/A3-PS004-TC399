@@ -48,15 +48,20 @@ Expected services:
 - `authoritative`
 - `resolver`
 - `gateway`
-- `dashboard`
+- `dashboard` (React UI and shared backend)
+- `dashboard-html` (HTML UI on port 3000)
 
 ### Open the dashboard
 
-Open this address in your browser:
+The HTML dashboard is at:
 
 http://localhost:3000
 
-The gateway listens on TCP port `853` on the Docker host.
+The React dashboard remains available at http://localhost:3001. Both
+frontends use the same backend APIs and live telemetry.
+
+The gateway listens on TCP port `8853` on the Docker host and forwards it
+to port `853` inside the container.
 
 ## 3. Check Logs and Service Health
 
@@ -109,7 +114,27 @@ docker compose --env-file .env -f src/docker-compose.yml exec resolver dig '@127
 docker compose --env-file .env -f src/docker-compose.yml exec resolver dig '@127.0.0.1' insecure.aegis.test A +dnssec
 ```
 
-## 6. Build, Upload, and Monitor the ESP32
+## 6. Measure Gateway Overhead
+
+With the stack running and local certificates generated, run the benchmark
+from the repository root:
+
+```powershell
+py src/scripts/benchmark_gateway.py --cold-samples 3 --warm-samples 20
+```
+
+The direct Unbound baseline uses `127.0.0.1:15353`; the authenticated gateway's
+container port `853` is mapped to host port `8853`. Cold samples restart
+Unbound before each measured DNS request. Warm samples prime the same name
+before timing. The unauthenticated case only measures mTLS rejection and has
+no Unbound cache state. Restarting Unbound during the cold phase briefly
+interrupts other resolver clients. The script always saves a JSON benchmark
+record to `benchmark-results.json` in the repository root; `--json-out` can
+select another path. The file records sample counts, median/p95 latency,
+success/failure counts, and observed DNSSEC verdicts per baseline and gateway
+path. It does not use or depend on dashboard metrics.
+
+## 7. Build, Upload, and Monitor the ESP32
 
 The PlatformIO firmware project is located at `src/esp32/`.
 

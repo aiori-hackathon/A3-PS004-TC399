@@ -1,52 +1,9 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
-  theme: {
-    extend: {
-      colors: {
-        forest: {
-          950: '#0A130F',
-          900: '#0F1E18',
-          850: '#13261E',
-          800: '#1A3329',
-          700: '#23422F',
-          600: '#2F5440',
-          500: '#43705A',
-        },
-        ivory: {
-          50: '#FCFAF4',
-          100: '#F6F1E4',
-          200: '#EAE3CF',
-          300: '#D9CFB4',
-          400: '#BDB293',
-        },
-        emerald: {
-          300: '#A3CDB5',
-          400: '#84B89B',
-          500: '#63987E',
-          600: '#4B7D64',
-        },
-        gold: {
-          200: '#EFDDAA',
-          300: '#DDC487',
-          400: '#C9AB68',
-          500: '#A88B4C',
-          600: '#8A7038',
-        },
-        verdict: {
-          secure: '#7FC79C',
-          insecure: '#D9B66A',
-          bogus: '#E0786A',
-          blocked: '#A3ADA7',
-          error: '#87958D',
-        },
-      },
-      fontFamily: {
-        display: ['"Fraunces"', 'Georgia', 'serif'],
-        sans: ['"Instrument Sans"', 'system-ui', 'sans-serif'],
-        mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
-      },
-    },
-  },
+  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  theme: { extend: {
+    colors: { bg: '#090d13', panel: '#0e141c', panel2: '#121a24', line: '#1d2835', ink: '#d6dee8', mute: '#8fa0b3', faint: '#5d6e82', accent: '#38bdf8' },
+    fontFamily: { mono: ['ui-monospace', '"Cascadia Mono"', '"SF Mono"', 'Consolas', 'Menlo', 'monospace'], sans: ['system-ui', '"Segoe UI"', 'Roboto', 'sans-serif'] },
+  } },
   plugins: [],
 };

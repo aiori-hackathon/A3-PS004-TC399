@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 
 import aiohttp
 import dns.asyncquery
+import dns.edns
 import dns.exception
 import dns.flags
 import dns.message
@@ -32,6 +33,28 @@ TLS_CERT = os.getenv("TLS_CERT", "certs/server.crt")
 TLS_KEY = os.getenv("TLS_KEY", "certs/server.key")
 CLIENT_CA = os.getenv("CLIENT_CA", "certs/rootCA.crt")
 MAX_DNS_MESSAGE = 65535
+MAX_EDE_OPTIONS = 8
+MAX_EDE_TEXT = 256
+RESOLVER_TIMEOUT = 3.0
+
+
+def extract_ede_info(response: dns.message.Message) -> list[dict]:
+    """Return bounded Extended DNS Error details from a resolver response."""
+    ede_info = []
+    for option in response.options:
+        if isinstance(option, dns.edns.EDEOption):
+            extra_text = option.text
+            if isinstance(extra_text, bytes):
+                extra_text = extra_text.decode("utf-8", errors="replace")
+            elif not isinstance(extra_text, str):
+                extra_text = str(extra_text or "")
+            ede_info.append({
+                "code": int(option.code),
+                "text": extra_text[:MAX_EDE_TEXT],
+            })
+            if len(ede_info) == MAX_EDE_OPTIONS:
+                break
+    return ede_info
 
 def error_response(
     query: dns.message.Message, rcode_value: int
@@ -46,15 +69,20 @@ def error_response(
 def classify_response(response: dns.message.Message) -> str:
     """Classify according to the trusted resolver's result.
 
-    For this lab, SERVFAIL is reported as BOGUS because the deliberately broken
-    signature should cause a validation failure. In production, SERVFAIL must
-    be distinguished from timeouts and other resolver failures.
+    A SERVFAIL is BOGUS only when the resolver identifies DNSSEC Bogus with
+    EDE; other SERVFAIL responses are not enough to establish that cause.
     """
     rcode = response.rcode()
     authenticated = bool(response.flags & dns.flags.AD)
 
     if rcode == dns.rcode.SERVFAIL:
-        return "BOGUS"
+        if any(
+            isinstance(option, dns.edns.EDEOption)
+            and option.code == dns.edns.EDECode.DNSSEC_BOGUS
+            for option in response.options
+        ):
+            return "BOGUS"
+        return "ERROR"
     if rcode in (dns.rcode.NOERROR, dns.rcode.NXDOMAIN) and authenticated:
         return "SECURE"
     if rcode in (dns.rcode.NOERROR, dns.rcode.NXDOMAIN) and not authenticated:
@@ -106,6 +134,7 @@ async def process_query(
     qtype = "UNKNOWN"
     status = "ERROR"
     query = None
+    ede_info = []
 
     try:
         # Parse the incoming message before attempting any upstream resolution.
@@ -163,8 +192,28 @@ async def process_query(
                 upstream_query,
                 RESOLVER_HOST,
                 port=RESOLVER_PORT,
-                timeout=3.0,
+                timeout=RESOLVER_TIMEOUT,
             )
+            if upstream.flags & dns.flags.TC:
+                print(
+                    f"[DNS] Truncated UDP response for {qname}; retrying over TCP",
+                    flush=True,
+                )
+                upstream = await dns.asyncquery.tcp(
+                    upstream_query,
+                    RESOLVER_HOST,
+                    port=RESOLVER_PORT,
+                    timeout=RESOLVER_TIMEOUT,
+                )
+                if upstream.flags & dns.flags.TC:
+                    status = "ERROR"
+                    print(
+                        f"[DNS] Truncated TCP response for {qname}",
+                        flush=True,
+                    )
+                    return error_response(
+                        query, dns.rcode.SERVFAIL
+                    ).to_wire()
 
         except (dns.exception.Timeout, OSError) as exc:
             status = "ERROR"
@@ -182,10 +231,12 @@ async def process_query(
             return error_response(query, dns.rcode.SERVFAIL).to_wire()
 
         response, status = process_policy(query, upstream)
+        ede_info = extract_ede_info(upstream)
         print(
             f"[DNS] {qname} {qtype}: "
             f"rcode={dns.rcode.to_text(upstream.rcode())}, "
-            f"AD={int(bool(upstream.flags & dns.flags.AD))}, status={status}",
+            f"AD={int(bool(upstream.flags & dns.flags.AD))}, status={status}, "
+            f"EDE={json.dumps(ede_info)}",
             flush=True,
         )
         return response.to_wire()
@@ -207,6 +258,7 @@ async def process_query(
             "latency_ms": round(latency_ms, 2),
             "cpu_percent": round(cpu_percent(), 1),
             "client": client[:64],
+            "ede_info": ede_info,
         }
         print(json.dumps(metric), flush=True)
         asyncio.create_task(publish_metrics(session, metric))

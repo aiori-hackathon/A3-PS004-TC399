@@ -314,10 +314,19 @@ docker compose --env-file .env -f src/docker-compose.yml logs --tail 100 gateway
 docker compose --env-file .env -f src/docker-compose.yml logs --tail 100 dashboard
 ```
 
+<<<<<<< HEAD
 -   Dashboard: http://127.0.0.1:3001 (host `3001` → container `3000`).
 -   Gateway: TCP port `8853` on the Docker host (mapped to container port `853`).
 -   The current Compose configuration binds the dashboard to
     `127.0.0.1:3001` for local access.
+=======
+-   HTML dashboard: http://localhost:3000
+-   React dashboard: http://localhost:3001
+-   Gateway: TCP port `8853` on the Docker host, forwarded to port `853`
+    inside the container.
+-   The HTML dashboard proxies API and Socket.IO requests to the React
+    dashboard's shared backend.
+>>>>>>> 31d2effdbde2c594661175e3cd35dec1de74526c
 
 Do not expose the resolver or authoritative DNS service publicly.
 
@@ -386,11 +395,11 @@ docker compose --env-file .env -f src/docker-compose.yml exec resolver dig '@127
                                                               bogus
   -------------------------------------------------------------------------------
 
-These outcomes have been observed in the local lab. A `SERVFAIL` is
-**not universally proof** of a DNSSEC validation failure: real resolver
-deployments may also return it for timeouts, network errors, or
-configuration problems. The deliberately broken-signature test zone is
-used to demonstrate the bogus path.
+These outcomes have been observed in the local lab. The gateway classifies a
+`SERVFAIL` as `BOGUS` only when the resolver includes EDE code 6 (`DNSSEC
+Bogus`); other `SERVFAIL` responses are classified as `ERROR`. This avoids
+treating timeouts, network errors, or configuration problems as DNSSEC
+validation failures.
 
 ## 6. Test the Gateway and Dashboard
 
@@ -413,6 +422,32 @@ CD=1 test             REFUSED     rcode=5 AD=0
 Exact spacing and latency vary. Keep http://127.0.0.1:3001 open.
 Accepted metrics are sent to Express at `POST /api/metrics` and
 broadcast to browsers through Socket.io as the `dns_metric` event.
+Extended DNS Error (EDE) details returned by the resolver are included in
+gateway logs and shown in the latest lookup card when present.
+The dashboard also retains the latest 2,000 device telemetry events in
+memory. They are available from `GET /api/device/telemetry` and replayed to
+browsers on Socket.IO connection, so refreshing the page restores device
+history while the dashboard process is running. Restarting the dashboard
+clears this in-memory history.
+
+The regression tests are offline unit tests: they do not start Docker, contact
+Unbound, or make external network requests. Install the project's Python
+requirements once if they are not already installed:
+
+```powershell
+py -m pip install -r requirements.txt
+```
+
+With Python dependencies and Node.js available, run the complete suite from
+the repository root with one command:
+
+```powershell
+py tests/run_tests.py
+```
+
+These tests cover gateway classification and packet handling, serial-line
+parsing, and dashboard JSON payload validation. They complement the live
+Docker integration test above.
 
 Useful checks:
 
@@ -769,7 +804,8 @@ Update it only when a task has actually been completed and verified.
     outcomes.
 -   [ ] Add authentication/access controls to the telemetry endpoint
     before any broader deployment.
--   [ ] Implement a baseline-versus-AegisDNS benchmark runner.
+-   [x] Implement a baseline-versus-AegisDNS benchmark runner with separate
+    cold-cache and warm-cache measurements.
 -   [ ] Measure median and p95 latency, throughput, success/rejection
     rates, gateway CPU/RSS memory, resolver response time, TLS/mTLS
     overhead, and ESP32 free heap/handshake timing where applicable.
@@ -788,6 +824,40 @@ Compare clearly defined configurations:
     DNSSEC-validation path.
 3.  **Negative cases:** Bogus DNSSEC responses and unauthenticated
     connection attempts.
+
+The local benchmark runner compares direct Unbound, authenticated gateway,
+bogus-signature, and unauthenticated-gateway paths. It reports cold and warm
+samples separately, including median and p95 latency. Cold DNS samples restart
+Unbound before each measurement; warm samples prime the same query first.
+Unauthenticated TLS rejection does not query Unbound, so its cache state is
+reported as not applicable. The cold run therefore briefly interrupts other
+clients using the local resolver.
+
+Start the Compose stack and generate the local PKI files first, then run from
+the repository root:
+
+```powershell
+py src/scripts/benchmark_gateway.py --cold-samples 3 --warm-samples 20
+```
+
+The resolver is published only on `127.0.0.1:15353` for direct baseline
+measurements. The gateway listens on port `853` inside Docker and is published
+as `127.0.0.1:8853` on the host. Each run writes a persistent
+`benchmark-results.json` file in the repository root (override with
+`--json-out`). It records separate baseline and gateway results, sample count,
+median and p95 latency, success/failure counts, per-sample responses, and the
+observed EDE-based DNSSEC verdict plus verdict counts. These direct measurements
+are the benchmark record; in-memory dashboard metrics are not used. Results
+are local to the hardware and should not be compared without recording system
+load and configuration. Success counts mean the measured DNS response matches
+the expected RCODE/AD bits, or that the unauthenticated TLS connection was
+rejected; DNSSEC verdicts are recorded independently. The `bogus` path checks
+for the configured invalid-signature test domain returning `SERVFAIL` with
+`AD=false`; if Unbound omits DNSSEC Bogus EDE, the gateway's observed verdict
+is `ERROR`, not `BOGUS`, and that distinction is retained in each JSON response.
+Each gateway sample opens a new TCP/TLS connection, so the latency delta
+includes connection setup and mTLS authentication rather than DNS processing
+alone.
 
 ## 12. References
 
