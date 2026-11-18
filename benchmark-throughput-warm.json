@@ -1,0 +1,26 @@
+{
+  "baseline": {
+    "mode": "warm",
+    "warmup": "unrecorded exact-name lookup primed before batch",
+    "samples": 100,
+    "success_count": 100,
+    "wall_seconds": 0.371486,
+    "throughput_rps": 269.189,
+    "median_ms": 2.912,
+    "p95_ms": 5.206,
+    "min_ms": 2.324,
+    "max_ms": 33.962
+  },
+  "gateway": {
+    "mode": "warm",
+    "warmup": "unrecorded exact-name lookup primed before batch",
+    "samples": 100,
+    "success_count": 100,
+    "wall_seconds": 2.529502,
+    "throughput_rps": 39.533,
+    "median_ms": 13.742,
+    "p95_ms": 36.367,
+    "min_ms": 11.387,
+    "max_ms": 38.726
+  }
+}

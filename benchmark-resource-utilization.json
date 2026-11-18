@@ -1,0 +1,43 @@
+{
+  "measurement_source": "Docker stats snapshots collected before, during, and after a warm benchmark load.",
+  "created_at": "2026-11-18T19:59:00+00:00",
+  "idle": {
+    "gateway": {
+      "cpu_percent": 0.0,
+      "memory_mib": 29.27
+    },
+    "resolver": {
+      "cpu_percent": 0.0,
+      "memory_mib": 2.75
+    }
+  },
+  "load_observed": {
+    "gateway": {
+      "peak_cpu_percent": 23.76,
+      "peak_memory_mib": 30.32
+    },
+    "resolver": {
+      "peak_cpu_percent": 0.67,
+      "peak_memory_mib": 7.977
+    }
+  },
+  "post_load": {
+    "gateway": {
+      "cpu_percent": 0.0,
+      "memory_mib": 29.32
+    },
+    "resolver": {
+      "cpu_percent": 0.0,
+      "memory_mib": 7.977
+    }
+  },
+  "benchmark": {
+    "file": "benchmark-load-warm.json",
+    "warm_baseline_samples": 100,
+    "warm_gateway_samples": 100,
+    "warm_baseline_median_ms": 2.74,
+    "warm_baseline_p95_ms": 3.495,
+    "warm_gateway_median_ms": 15.445,
+    "warm_gateway_p95_ms": 37.531
+  }
+}

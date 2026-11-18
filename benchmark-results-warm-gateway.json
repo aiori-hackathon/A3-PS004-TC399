@@ -1,0 +1,871 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-11-18T19:58:31.010038+00:00",
+  "measurement_source": "Direct DNS/TLS benchmark requests; dashboard metrics are not used.",
+  "configuration": {
+    "resolver": "127.0.0.1:15353",
+    "gateway": "127.0.0.1:8853",
+    "cold_samples": 1,
+    "warm_samples": 20,
+    "timeout_seconds": 5.0,
+    "cold_definition": "Resolver restarted before every measured DNS sample.",
+    "warm_definition": "One unrecorded lookup primes each exact query before sampling."
+  },
+  "cold": {
+    "baseline": {
+      "description": "Direct to Unbound, valid.aegis.test",
+      "resolver_cache": "cold",
+      "success_definition": "DNS response matches expected RCODE and AD bit",
+      "expected_outcome": {
+        "rcode": "NOERROR",
+        "ad": true
+      },
+      "samples": 1,
+      "sample_count": 1,
+      "success_count": 1,
+      "failure_count": 0,
+      "median_ms": 14.295,
+      "p95_ms": 14.295,
+      "min_ms": 14.295,
+      "max_ms": 14.295,
+      "dnssec_verdict": "SECURE",
+      "dnssec_verdict_counts": {
+        "SECURE": 1
+      },
+      "rejected": 0,
+      "warm_prime_error": null,
+      "responses": [
+        {
+          "latency_ms": 14.295,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        }
+      ]
+    },
+    "gateway": {
+      "description": "Authenticated gateway, valid.aegis.test",
+      "resolver_cache": "cold",
+      "success_definition": "DNS response matches expected RCODE and AD bit",
+      "expected_outcome": {
+        "rcode": "NOERROR",
+        "ad": true
+      },
+      "samples": 1,
+      "sample_count": 1,
+      "success_count": 1,
+      "failure_count": 0,
+      "median_ms": 19.807,
+      "p95_ms": 19.807,
+      "min_ms": 19.807,
+      "max_ms": 19.807,
+      "dnssec_verdict": "SECURE",
+      "dnssec_verdict_counts": {
+        "SECURE": 1
+      },
+      "rejected": 0,
+      "warm_prime_error": null,
+      "responses": [
+        {
+          "latency_ms": 19.807,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        }
+      ]
+    },
+    "bogus": {
+      "description": "Authenticated gateway, bogus.aegis.test",
+      "resolver_cache": "cold",
+      "success_definition": "DNS response matches expected RCODE and AD bit",
+      "expected_outcome": {
+        "rcode": "SERVFAIL",
+        "ad": false
+      },
+      "samples": 1,
+      "sample_count": 1,
+      "success_count": 1,
+      "failure_count": 0,
+      "median_ms": 18.629,
+      "p95_ms": 18.629,
+      "min_ms": 18.629,
+      "max_ms": 18.629,
+      "dnssec_verdict": "ERROR",
+      "dnssec_verdict_counts": {
+        "ERROR": 1
+      },
+      "rejected": 0,
+      "warm_prime_error": null,
+      "responses": [
+        {
+          "latency_ms": 18.629,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        }
+      ]
+    },
+    "unauthenticated": {
+      "description": "Gateway without a client certificate",
+      "resolver_cache": "not_applicable",
+      "success_definition": "mTLS connection rejected without a client certificate",
+      "expected_outcome": "reject_unauthenticated_connection",
+      "samples": 1,
+      "sample_count": 1,
+      "success_count": 1,
+      "failure_count": 0,
+      "median_ms": 29.197,
+      "p95_ms": 29.197,
+      "min_ms": 29.197,
+      "max_ms": 29.197,
+      "dnssec_verdict": "NOT_APPLICABLE",
+      "dnssec_verdict_counts": {
+        "NOT_APPLICABLE": 1
+      },
+      "rejected": 1,
+      "warm_prime_error": null,
+      "responses": [
+        {
+          "latency_ms": 29.197,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        }
+      ]
+    },
+    "gateway_overhead_vs_baseline": {
+      "median_delta_ms": 5.512,
+      "median_delta_percent": 38.56
+    }
+  },
+  "warm": {
+    "baseline": {
+      "description": "Direct to Unbound, valid.aegis.test",
+      "resolver_cache": "warm",
+      "success_definition": "DNS response matches expected RCODE and AD bit",
+      "expected_outcome": {
+        "rcode": "NOERROR",
+        "ad": true
+      },
+      "samples": 20,
+      "sample_count": 20,
+      "success_count": 20,
+      "failure_count": 0,
+      "median_ms": 2.599,
+      "p95_ms": 3.154,
+      "min_ms": 2.369,
+      "max_ms": 3.294,
+      "dnssec_verdict": "SECURE",
+      "dnssec_verdict_counts": {
+        "SECURE": 20
+      },
+      "rejected": 0,
+      "warm_prime_error": null,
+      "responses": [
+        {
+          "latency_ms": 2.619,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 2.506,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 2.397,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 3.294,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 2.781,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 2.413,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 2.388,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 2.462,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 2.369,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 3.008,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 2.69,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 2.571,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 2.579,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 2.731,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 2.444,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 3.154,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 2.783,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 2.488,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 2.757,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 2.701,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        }
+      ]
+    },
+    "gateway": {
+      "description": "Authenticated gateway, valid.aegis.test",
+      "resolver_cache": "warm",
+      "success_definition": "DNS response matches expected RCODE and AD bit",
+      "expected_outcome": {
+        "rcode": "NOERROR",
+        "ad": true
+      },
+      "samples": 20,
+      "sample_count": 20,
+      "success_count": 20,
+      "failure_count": 0,
+      "median_ms": 13.811,
+      "p95_ms": 35.847,
+      "min_ms": 11.958,
+      "max_ms": 37.867,
+      "dnssec_verdict": "SECURE",
+      "dnssec_verdict_counts": {
+        "SECURE": 20
+      },
+      "rejected": 0,
+      "warm_prime_error": null,
+      "responses": [
+        {
+          "latency_ms": 12.401,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 22.621,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 12.679,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 37.867,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 25.422,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 25.511,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 12.41,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 13.644,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 33.855,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 12.49,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 12.577,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 12.982,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 12.77,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 28.857,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 23.586,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 25.313,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 13.978,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 35.847,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 11.958,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        },
+        {
+          "latency_ms": 12.497,
+          "rcode": "NOERROR",
+          "ad": true,
+          "status": "SECURE",
+          "dnssec_verdict": "SECURE",
+          "success": true
+        }
+      ]
+    },
+    "bogus": {
+      "description": "Authenticated gateway, bogus.aegis.test",
+      "resolver_cache": "warm",
+      "success_definition": "DNS response matches expected RCODE and AD bit",
+      "expected_outcome": {
+        "rcode": "SERVFAIL",
+        "ad": false
+      },
+      "samples": 20,
+      "sample_count": 20,
+      "success_count": 20,
+      "failure_count": 0,
+      "median_ms": 24.355,
+      "p95_ms": 33.595,
+      "min_ms": 11.63,
+      "max_ms": 37.352,
+      "dnssec_verdict": "ERROR",
+      "dnssec_verdict_counts": {
+        "ERROR": 20
+      },
+      "rejected": 0,
+      "warm_prime_error": null,
+      "responses": [
+        {
+          "latency_ms": 30.167,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 23.835,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 11.63,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 37.352,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 12.141,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 13.331,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 13.044,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 14.07,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 22.511,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 12.309,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 12.367,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 33.595,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 25.182,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 25.6,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 25.458,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 24.875,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 30.278,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 30.247,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 17.211,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        },
+        {
+          "latency_ms": 29.549,
+          "rcode": "SERVFAIL",
+          "ad": false,
+          "status": "ERROR",
+          "dnssec_verdict": "ERROR",
+          "success": true
+        }
+      ]
+    },
+    "unauthenticated": {
+      "description": "Gateway without a client certificate",
+      "resolver_cache": "not_applicable",
+      "success_definition": "mTLS connection rejected without a client certificate",
+      "expected_outcome": "reject_unauthenticated_connection",
+      "samples": 20,
+      "sample_count": 20,
+      "success_count": 20,
+      "failure_count": 0,
+      "median_ms": 6.841,
+      "p95_ms": 18.508,
+      "min_ms": 6.023,
+      "max_ms": 27.751,
+      "dnssec_verdict": "NOT_APPLICABLE",
+      "dnssec_verdict_counts": {
+        "NOT_APPLICABLE": 20
+      },
+      "rejected": 20,
+      "warm_prime_error": null,
+      "responses": [
+        {
+          "latency_ms": 6.474,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 7.389,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 18.508,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 6.745,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 6.687,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 6.381,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 7.77,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 16.576,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 27.751,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 6.052,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 6.58,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 7.259,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 6.023,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 7.693,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 8.19,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 6.514,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 6.865,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 6.55,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 6.818,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        },
+        {
+          "latency_ms": 6.965,
+          "rejected": true,
+          "dnssec_verdict": "NOT_APPLICABLE",
+          "reason": "Gateway closed the connection unexpectedly",
+          "success": true
+        }
+      ]
+    },
+    "gateway_overhead_vs_baseline": {
+      "median_delta_ms": 11.212,
+      "median_delta_percent": 431.4
+    }
+  }
+}
