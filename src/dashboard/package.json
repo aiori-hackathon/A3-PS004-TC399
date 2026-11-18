@@ -9,6 +9,8 @@
   },
   "dependencies": {
     "express": "^5.1.0",
-    "socket.io": "^4.8.1"
+    "mongodb": "^6.22.0",
+    "socket.io": "^4.8.1",
+    "zod": "^3.25.76"
   }
 }

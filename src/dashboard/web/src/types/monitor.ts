@@ -10,6 +10,7 @@ export interface GatewayMetric {
   latency_ms: number;
   cpu_percent: number;
   client: string;
+  deviceId?: string;
   ede_info?: EdeInfo[];
   /** Parsed timestamp (client side). */
   ts: number;
@@ -21,6 +22,9 @@ export interface DeviceEvent {
   id: string;
   timestamp: string;
   ts: number;
+  deviceId?: string;
+  schemaVersion?: number;
+  receivedAt?: string;
   kind: 'serial_status' | 'tls_handshake' | 'tls_failure' | 'dns_result';
   connected?: boolean;
   port?: string;
@@ -33,6 +37,14 @@ export interface DeviceEvent {
   id_match?: boolean;
 }
 
+export interface DeviceSummary {
+  deviceId: string;
+  label: string;
+  firstSeen: string;
+  lastSeen: string;
+}
+
 export type FeedStatus = 'connecting' | 'live' | 'offline';
+export type StorageHealth = 'ok' | 'degraded' | 'memory' | 'unknown';
 export type TimeWindow = 'all' | '5m' | '1h';
 export type ApiStatus = 'idle' | 'loading' | 'success' | 'error' | 'online' | 'offline';

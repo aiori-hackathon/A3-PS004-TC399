@@ -11,6 +11,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 COPY server.js ./
+COPY lib/ ./lib/
 COPY --from=webbuild /web/dist ./public
 EXPOSE 3000
 CMD ["npm", "start"]

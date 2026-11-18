@@ -852,6 +852,28 @@ Each gateway sample opens a new TCP/TLS connection, so the latency delta
 includes connection setup and mTLS authentication rather than DNS processing
 alone.
 
+## 11.5 Persistence, Networking Modes & Offline Baselines
+
+### MongoDB Persistence & Device Correlation
+When started via Docker Compose, the dashboard persists data to an internal-only `mongodb` container (`mongo:7.0.14`, static IP `172.29.0.50` on `aegis_net`, no published host port) using a single database (`aegisdns`) keyed by `deviceId`:
+- `devices`: auto-created per normalised mTLS client CN (or telemetry `deviceId`), tracking `firstSeen` and `lastSeen`.
+- `dns_metrics` & `device_telemetry`: MongoDB time-series collections (`timeField: timestamp`, `metaField: deviceId`) with configurable TTL retention (`RETENTION_DAYS`, default `30` days).
+- `test_runs`: stores observed-vs-expected results from `src/scripts/test_gateway.py` (`GET /api/test-runs`).
+- **Degraded mode:** If MongoDB stops mid-run, the dashboard buffers writes in memory, continues returning `202` and broadcasting over Socket.IO, exposes `storage: "degraded"` on `GET /health`, and replays buffered records without duplicates when MongoDB returns.
+- **Device correlation:** DNS metrics derive `deviceId` from the mTLS client certificate CN (`client`). Set `DEVICE_ID` (or `--device-id`) on `src/tools/serial_to_dashboard.py` to that same CN (for example `esp32-client`) so gateway metrics and ESP32 serial telemetry line up under one device entry; otherwise telemetry defaults to `unknown`.
+- **Migrating from in-memory mode:** Add `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_DB`, and `RETENTION_DAYS` from `.env.example` to your local `.env`, then restart with `docker compose --env-file .env -f src/docker-compose.yml up -d --build`. If `MONGO_URL` is unset (e.g. direct `node server.js` or unit tests), the dashboard falls back to in-memory mode automatically.
+
+### HOST Mode vs NETWORK Mode
+- **HOST mode (default when running Python directly on your laptop/PC):**
+  - `GATEWAY_HOST=127.0.0.1`, `GATEWAY_PORT=8853`, `METRICS_URL=http://127.0.0.1:3001/api/metrics`, `DASHBOARD_URL=http://127.0.0.1:3001`.
+  - Run smoke tests & record `test_runs`: `python src/scripts/test_gateway.py`
+  - Run offline statistical latency baseline (outside DNS path): `python src/scripts/latency_baseline.py`
+  - Run ESP32 serial bridge: `python src/tools/serial_to_dashboard.py --port COM13 --device-id esp32-client`
+- **NETWORK mode (running tools inside `aegis_net` via Compose profiles):**
+  - `GATEWAY_HOST=gateway`, `GATEWAY_PORT=853`, `METRICS_URL=http://dashboard:3000/api/metrics`, `DASHBOARD_URL=http://dashboard:3000`.
+  - Run containerized smoke test: `docker compose --env-file .env -f src/docker-compose.yml --profile tools run --rm gateway-tester`
+  - **Linux / Raspberry Pi edge nodes only (`serial-linux` profile):** USB serial passthrough (`devices:`) works on Linux hosts, **not** on Docker Desktop for Windows/macOS. On Linux, run `docker compose --env-file .env -f src/docker-compose.yml --profile serial-linux up -d serial-bridge`. On Windows/macOS, run `serial_to_dashboard.py` directly on the host in HOST mode.
+
 ## 12. References
 
 -   [RFC 4033 --- DNS Security Introduction and

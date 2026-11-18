@@ -1,0 +1,138 @@
+name: AegisDNS CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  secret-guard:
+    name: Secret & Credential Tracking Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: Fail if secrets, private keys, certs, or .env are tracked
+        shell: bash
+        run: |
+          set -euo pipefail
+          BAD=$(git ls-files | grep -E '(^|/)\.env$|\.(key|pem|p12|pfx|private|csr|srl)$|(^|/)src/esp32/include/(secrets|certs)\.h$|(^|/)src/pki/.*\.(crt|key)$' || true)
+          if [ -n "$BAD" ]; then
+            echo "ERROR: Forbidden secret/credential files are tracked in git:"
+            echo "$BAD"
+            exit 1
+          fi
+          echo "OK: No secret or credential files are tracked."
+
+  frontend:
+    name: Frontend Typecheck & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/dashboard/web
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.1.0
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: src/dashboard/web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run build
+
+  backend:
+    name: Backend Unit & MongoDB Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7.0.14
+        env:
+          MONGO_INITDB_ROOT_USERNAME: aegisdns
+          MONGO_INITDB_ROOT_PASSWORD: ci-test-password-only
+          MONGO_INITDB_DATABASE: aegisdns
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval \"db.adminCommand('ping').ok\" | grep -q 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.1.0
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: src/dashboard/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: src/dashboard
+      - name: Run Node regression gate, validation, and MongoDB integration tests
+        env:
+          TEST_MONGO_URL: mongodb://aegisdns:ci-test-password-only@127.0.0.1:27017/aegisdns?authSource=admin
+        run: node --test tests/test_dashboard.js tests/test_storage.js tests/test_validation.js
+
+  python:
+    name: Python Syntax & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5.3.0
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+      - run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Bytecode-compile Python gateway, bridge, and scripts
+        run: |
+          python -m py_compile \
+            src/gateway/gateway.py \
+            src/tools/serial_to_dashboard.py \
+            src/scripts/test_gateway.py \
+            src/scripts/benchmark_gateway.py \
+            src/scripts/latency_baseline.py
+      - name: Run Python unit tests (including serial parser regression gate)
+        run: python -m unittest discover -s tests -v
+
+  firmware:
+    name: ESP32 Firmware Compile Check (PlatformIO)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5.3.0
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4.2.0
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-pio-${{ hashFiles('src/esp32/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-
+      - name: Install PlatformIO CLI
+        run: pip install --no-cache-dir platformio
+      - name: Create non-secret placeholder headers for CI build only
+        shell: bash
+        run: |
+          cp src/esp32/include/secrets.h.example src/esp32/include/secrets.h
+          cat <<'EOF' > src/esp32/include/certs.h
+          #pragma once
+          static const char* CA_CERT = "PLACEHOLDER-CI-ONLY";
+          static const char* CLIENT_CERT = "PLACEHOLDER-CI-ONLY";
+          static const char* CLIENT_KEY = "PLACEHOLDER-CI-ONLY";
+          EOF
+      - name: Compile ESP32 firmware
+        run: pio run -d src/esp32
+
+  docker:
+    name: Docker Compose Config & Dashboard Image Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: Validate docker-compose configuration
+        run: |
+          cp .env.example .env
+          docker compose --env-file .env -f src/docker-compose.yml config --quiet
+      - name: Build dashboard Docker image
+        run: docker build -t aegisdns-dashboard:ci src/dashboard

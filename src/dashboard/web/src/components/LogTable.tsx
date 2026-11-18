@@ -36,7 +36,7 @@ function download(name: string, mime: string, text: string) {
   setTimeout(() => URL.revokeObjectURL(a.href), 500);
 }
 
-export function LogTable({ metrics, all, onClear, notify }: { metrics: GatewayMetric[]; all: GatewayMetric[]; onClear: () => void; notify: (s: string) => void }) {
+export function LogTable({ metrics, all, persistent = false, onClear, notify }: { metrics: GatewayMetric[]; all: GatewayMetric[]; persistent?: boolean; onClear: () => void; notify: (s: string) => void }) {
   const [filter, setFilter] = useState<Filter>('ALL');
   const [q, setQ] = useState('');
   const [limit, setLimit] = useState(PAGE);
@@ -73,7 +73,13 @@ export function LogTable({ metrics, all, onClear, notify }: { metrics: GatewayMe
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter name, client, type" aria-label="Filter log" className="w-full min-w-0 rounded-md border border-line bg-bg px-2.5 py-1.5 sm:w-56" />
         <button className="btn" onClick={csv}>CSV</button>
         <button className="btn" onClick={jsonl}>JSONL</button>
-        <button className="btn" onClick={onClear} title="Clear dashboard history only; server history is kept">Clear view</button>
+        <button
+          className="btn"
+          onClick={onClear}
+          title={persistent ? 'Clear dashboard view only; persisted database history is kept' : 'Clear dashboard view only; server history is kept'}
+        >
+          Clear view
+        </button>
       </div>
       <div className="max-h-[440px] overflow-auto rounded-[5px] border border-line">
         <table className="w-full min-w-[860px] text-xs">

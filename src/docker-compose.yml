@@ -73,10 +73,39 @@ services:
       aegis_net:
         ipv4_address: 172.29.0.30
 
+  mongodb:
+    image: mongo:7.0.14
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-aegisdns}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-change-me-local-only}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-aegisdns}
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      aegis_net:
+        ipv4_address: 172.29.0.50
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.adminCommand('ping').ok\" | grep -q 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
   dashboard:
     build:
       context: ./dashboard
     restart: unless-stopped
+    environment:
+      MONGO_HOST: mongodb
+      MONGO_PORT: "27017"
+      MONGO_USER: ${MONGO_USER:-aegisdns}
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-change-me-local-only}
+      MONGO_DB: ${MONGO_DB:-aegisdns}
+      RETENTION_DAYS: ${RETENTION_DAYS:-30}
+    depends_on:
+      mongodb:
+        condition: service_healthy
     ports:
       - "127.0.0.1:3001:3000"
     networks:
@@ -95,9 +124,54 @@ services:
     networks:
       - aegis_net
 
+  # Optional NETWORK-mode smoke test & test-run recorder (run with: --profile tools run --rm gateway-tester)
+  gateway-tester:
+    profiles: ["tools"]
+    image: python:3.12-slim
+    working_dir: /app
+    command: ["python", "/app/scripts/test_gateway.py"]
+    environment:
+      GATEWAY_HOST: "gateway"
+      GATEWAY_PORT: "853"
+      GATEWAY_TLS_SERVERNAME: "${GATEWAY_IP:-127.0.0.1}"
+      METRICS_URL: "http://dashboard:3000/api/metrics"
+      DASHBOARD_URL: "http://dashboard:3000"
+      PKI_DIR: "/app/pki"
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ./pki:/app/pki:ro
+    depends_on:
+      - gateway
+      - dashboard
+    networks:
+      - aegis_net
+
+  # Optional Linux/Raspberry Pi USB serial bridge (NOT default; does not work on Docker Desktop for Windows/macOS).
+  # Run on Linux edge nodes with: --profile serial-linux up -d serial-bridge
+  serial-bridge:
+    profiles: ["serial-linux"]
+    build:
+      context: ./tools
+      dockerfile: serial-bridge/Dockerfile
+    restart: unless-stopped
+    environment:
+      SERIAL_PORT: "${SERIAL_DEVICE:-/dev/ttyUSB0}"
+      SERIAL_BAUD: "${SERIAL_BAUD:-115200}"
+      DASHBOARD_URL: "http://dashboard:3000"
+      DEVICE_ID: "${DEVICE_ID:-unknown}"
+    devices:
+      - "${SERIAL_DEVICE:-/dev/ttyUSB0}:${SERIAL_DEVICE:-/dev/ttyUSB0}"
+    depends_on:
+      - dashboard
+    networks:
+      - aegis_net
+
 networks:
   aegis_net:
     driver: bridge
     ipam:
       config:
         - subnet: 172.29.0.0/24
+
+volumes:
+  mongodb_data:

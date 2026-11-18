@@ -29,7 +29,13 @@ def main() -> int:
         return 1
 
     node_result = subprocess.run(
-        [node, "--test", "tests/test_dashboard.js"],
+        [
+            node,
+            "--test",
+            "tests/test_dashboard.js",
+            "tests/test_storage.js",
+            "tests/test_validation.js",
+        ],
         cwd=ROOT,
         check=False,
     )

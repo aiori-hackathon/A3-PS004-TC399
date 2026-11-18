@@ -20,13 +20,20 @@ function Kpi({ label, value, sub, hex = '#38bdf8', hot = false }: { label: strin
 }
 
 function Dashboard() {
-  const { feed, metrics, device, paused, pending, togglePause, clear } = useMetrics();
+  const {
+    feed, metrics, device, devices, selectedDevice, activeDevice, lastDeviceSwitch, selectDevice,
+    paused, pending, togglePause, clear, storageHealth, storagePersistent, storageBuffered,
+  } = useMetrics();
   const [win, setWin] = useState<TimeWindow>('all');
   const [now, setNow] = useState(() => Date.now());
   const [toast, setToast] = useState('');
   const [start] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 3000); return () => clearTimeout(t); }, [toast]);
+  useEffect(() => {
+    if (!lastDeviceSwitch) return;
+    setToast(`Device changed — view reset to ${lastDeviceSwitch.deviceId} (previous device history kept in storage).`);
+  }, [lastDeviceSwitch]);
 
   const windowMs = WINDOW_MS[win];
   // Re-evaluate the window every 5 s (not every second) so lists stay stable between ticks.
@@ -58,7 +65,41 @@ function Dashboard() {
           <span className="inline-flex items-center gap-2 rounded-full border border-line bg-panel px-2.5 py-0.5 text-xs text-mute">
             <i className="h-2 w-2 rounded-full" style={{ background: device.length ? (devFresh ? '#3ddc97' : '#f5b942') : '#5d6e82' }} />ESP32: {device.length ? (devFresh ? 'reporting' : 'idle') : 'no telemetry'}
           </span>
+          {storageHealth !== 'unknown' && (
+            <span
+              className="inline-flex items-center gap-2 rounded-full border border-line bg-panel px-2.5 py-0.5 text-xs text-mute"
+              role="status"
+              style={storageHealth === 'degraded' ? { borderColor: '#f5b942', color: '#f5b942' } : undefined}
+            >
+              <i
+                className="h-2 w-2 rounded-full"
+                style={{
+                  background: storageHealth === 'ok' ? '#3ddc97' : storageHealth === 'degraded' ? '#f5b942' : '#5d6e82',
+                }}
+              />
+              Storage: {storageHealth === 'ok' ? 'persistent' : storageHealth === 'degraded' ? `degraded${storageBuffered ? ` (${storageBuffered} buffered)` : ''}` : 'memory only'}
+            </span>
+          )}
           <span className="font-mono text-faint" aria-label="Session duration">{p((s / 3600) | 0)}:{p(((s / 60) | 0) % 60)}:{p(s % 60)}</span>
+          <label className="inline-flex items-center gap-1.5 text-xs text-mute">
+            <span className="sr-only">Active device filter</span>
+            <select
+              aria-label="Device view"
+              value={selectedDevice}
+              onChange={(e) => selectDevice(e.target.value)}
+              className="rounded-md border border-line bg-panel px-2.5 py-1 text-xs text-ink focus:border-accent"
+            >
+              <option value="auto">
+                Auto device{activeDevice ? ` (${activeDevice})` : ''}
+              </option>
+              {devices.map((d) => (
+                <option key={d.deviceId} value={d.deviceId}>
+                  {d.label || d.deviceId}
+                </option>
+              ))}
+              <option value="all">All devices</option>
+            </select>
+          </label>
           <div className="inline-flex overflow-hidden rounded-md border border-line" role="group" aria-label="Time window">
             {WINDOWS.map(([k, l]) => <button key={k} aria-pressed={win === k} onClick={() => setWin(k)} className={`border-l border-line px-3 py-1 first:border-0 transition-colors ${win === k ? 'bg-accent font-semibold text-[#04121c]' : 'bg-panel text-mute hover:text-ink'}`}>{l}</button>)}
           </div>
@@ -82,6 +123,12 @@ function Dashboard() {
         {feed === 'offline' && (
           <div role="alert" className="rounded-md border border-[#ff5c6c]/50 bg-[#ff5c6c]/10 px-3.5 py-2.5 text-sm text-ink">
             <b className="text-[#ff7b88]">Connection interrupted.</b> The dashboard is retrying; new gateway events may be delayed.
+          </div>
+        )}
+
+        {storageHealth === 'degraded' && (
+          <div role="alert" className="rounded-md border border-[#f5b942]/50 bg-[#f5b942]/10 px-3.5 py-2.5 text-sm text-ink">
+            <b className="text-[#f5b942]">Storage degraded.</b> MongoDB is currently unavailable; new events are being buffered in memory{storageBuffered > 0 ? ` (${storageBuffered} pending)` : ''} and will replay automatically on recovery.
           </div>
         )}
 
@@ -116,7 +163,20 @@ function Dashboard() {
           <TopTable metrics={view} />
         </div>
 
-        <LogTable metrics={view} all={metrics} onClear={() => { clear(); setToast('View cleared. Server history is kept.'); }} notify={setToast} />
+        <LogTable
+          metrics={view}
+          all={metrics}
+          persistent={storagePersistent && storageHealth === 'ok'}
+          onClear={() => {
+            clear();
+            setToast(
+              storagePersistent && storageHealth === 'ok'
+                ? 'View cleared. Persisted database history is kept.'
+                : 'View cleared. Server history is kept.',
+            );
+          }}
+          notify={setToast}
+        />
       </main>
       <div role="status" aria-live="polite" className={`pointer-events-none fixed bottom-4 right-4 max-w-sm rounded-md border border-line bg-panel2 px-3.5 py-2.5 shadow-xl transition-all duration-200 ${toast ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'}`}>{toast}</div>
     </div>
