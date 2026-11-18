@@ -60,10 +60,12 @@ services:
       TLS_CERT: "/app/certs/server.crt"
       TLS_KEY: "/app/certs/server.key"
       CLIENT_CA: "/app/certs/rootCA.crt"
+      APNIC_DB_PATH: "/data/apnic/apnic.db"
     volumes:
       - ./pki/server.crt:/app/certs/server.crt:ro
       - ./pki/server.key:/app/certs/server.key:ro
       - ./pki/rootCA.crt:/app/certs/rootCA.crt:ro
+      - ../data/apnic:/data/apnic:ro
     depends_on:
       - resolver
       - dashboard
@@ -103,6 +105,10 @@ services:
       MONGO_PASSWORD: ${MONGO_PASSWORD:-change-me-local-only}
       MONGO_DB: ${MONGO_DB:-aegisdns}
       RETENTION_DAYS: ${RETENTION_DAYS:-30}
+      APNIC_DB_PATH: "/data/apnic/apnic.db"
+      APNIC_STATUS_PATH: "/data/apnic/sync_status.json"
+    volumes:
+      - ../data/apnic:/data/apnic:ro
     depends_on:
       mongodb:
         condition: service_healthy
@@ -111,6 +117,23 @@ services:
     networks:
       aegis_net:
         ipv4_address: 172.29.0.40
+
+  apnic-updater:
+    build:
+      context: ..
+      dockerfile: src/apnic/Dockerfile
+    restart: unless-stopped
+    environment:
+      APNIC_DATA_DIR: "/data/apnic"
+      APNIC_DB_PATH: "/data/apnic/apnic.db"
+      APNIC_UPDATE_INTERVAL_HOURS: "${APNIC_UPDATE_INTERVAL_HOURS:-24}"
+      APNIC_GPG_FINGERPRINT: "${APNIC_GPG_FINGERPRINT:-}"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ../data/apnic:/data/apnic
+    networks:
+      aegis_net:
+        ipv4_address: 172.29.0.60
 
   dashboard-html:
     build:

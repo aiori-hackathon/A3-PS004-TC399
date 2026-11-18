@@ -1,0 +1,13 @@
+{
+  "current_serial": "20261119",
+  "last_successful_import": "2026-11-18T21:08:20.051847+00:00",
+  "last_update_attempt": "2026-11-18T21:41:37.008387+00:00",
+  "signature_verification_status": "PENDING_KEY_CONFIGURATION",
+  "checksum_verification_status": "VERIFIED",
+  "current_update_status": "SUCCESS",
+  "last_error": null,
+  "error_category": null,
+  "sha256": "b754a20ed544e166736a4b194dd6cf7e758e14d83f20c10d66be62bc2dbea34c",
+  "record_count": 89809,
+  "trusted_key_configured": false
+}

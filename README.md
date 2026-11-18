@@ -874,6 +874,187 @@ When started via Docker Compose, the dashboard persists data to an internal-only
   - Run containerized smoke test: `docker compose --env-file .env -f src/docker-compose.yml --profile tools run --rm gateway-tester`
   - **Linux / Raspberry Pi edge nodes only (`serial-linux` profile):** USB serial passthrough (`devices:`) works on Linux hosts, **not** on Docker Desktop for Windows/macOS. On Linux, run `docker compose --env-file .env -f src/docker-compose.yml --profile serial-linux up -d serial-bridge`. On Windows/macOS, run `serial_to_dashboard.py` directly on the host in HOST mode.
 
+## 11.6 APNIC Network Intelligence Layer
+
+AegisDNS includes an independent **APNIC Network Intelligence Layer** that ingests official APNIC delegated-resource allocation data, maintains a local searchable SQLite database, and provides supplementary network intelligence to the gateway and dashboard without ever becoming part of the DNSSEC trust or validation chain.
+
+### Current implementation status
+
+The implementation includes the updater daemon, atomic SQLite publication,
+read-only gateway enrichment, read-only dashboard APIs, and APNIC monitor views
+for both the React and HTML dashboards. DNSSEC validation and DNS response
+handling remain unchanged.
+
+A local ingestion snapshot has observed serial `20261119` with `89,809`
+resource records: `58,433` IPv4, `17,350` IPv6, and `14,026` ASN records.
+The top allocated country-code counts observed in that snapshot were AU, IN,
+CN, ID, and BD. These allocation statistics are supplementary network metadata;
+they are not proof of live routing or physical server location.
+
+The MD5 sidecar is implemented and checked. OpenPGP signature verification is
+not active until an operator independently configures the signing trust anchor:
+
+- the code does **not** hardcode or automatically trust a key fingerprint;
+- a fingerprint must be verified out-of-band against APNIC's published
+  signing-key information;
+- without `APNIC_GPG_FINGERPRINT`, status remains
+  `PENDING_KEY_CONFIGURATION`;
+- a locally present "good signature" result from GPG alone is not sufficient
+  for deployment unless the configured key fingerprint is first verified.
+
+### 1. Architectural Principle: Strict Decoupling
+```
+APNIC FTP/HTTPS
+      |
+      v
+APNIC Downloader
+      |
+      v
+Integrity & Signature Verification (MD5 + GnuPG detached signature)
+      |
+      v
+Dataset Parser (RIR Statistics Exchange format)
+      |
+      v
+SQLite Database (Staging tables -> Atomic swap -> WAL mode)
+      |
+      +-----------------------------+
+      |                             |
+      v                             v
+Gateway Supplementary Enrichment  Dashboard APIs (/api/apnic/*)
+(Post-DNSSEC verdict only)          |
+                                    v
+                              APNIC Data Monitor UI
+```
+**CRITICAL RULE:** APNIC data enriches AegisDNS network intelligence; it **must never** decide whether a DNS response is DNSSEC secure, override an Unbound DNSSEC verdict, alter AD-bit interpretation, change BOGUS handling, or block DNS requests if SQLite is unavailable.
+
+### 2. Dataset Sources & Official Sidecars
+The integration ingests official daily resource files directly from APNIC:
+- **Dataset:** `https://ftp.apnic.net/stats/apnic/delegated-apnic-latest`
+- **MD5 Checksum:** `https://ftp.apnic.net/stats/apnic/delegated-apnic-latest.md5`
+- **Detached OpenPGP Signature:** `https://ftp.apnic.net/stats/apnic/delegated-apnic-latest.asc`
+- **APNIC Public Key:** `https://ftp.apnic.net/stats/apnic/CURRENT_PUBLIC_KEY`
+
+### 3. Data Format & Interpretation
+APNIC delegated statistics conform to RFC 7535 / RIR Statistics format:
+- **Header:** `version|registry|serial|records|startdate|enddate|UTCoffset`
+- **Summary:** `registry|*|type|*|count|summary`
+- **Resource Records:** `registry|cc|type|start|value|date|status[|extensions...]`
+- **Field Value Interpretation:**
+  - `ipv4`: `value` is the **number of IPv4 addresses** (e.g. `256` for a `/24`). Stored as normalized decimal boundaries.
+  - `ipv6`: `value` is the **CIDR prefix length** (e.g. `32` for a `/32`). Stored as 32-character fixed-width hexadecimal boundaries for exact 128-bit lexicographical range queries without integer overflow.
+  - `asn`: `value` is the **number of ASNs** in the block. Stored as decimal boundaries.
+- **Validation:** Parsed record total must strictly match the `records` count in the dataset header.
+
+### 4. Important Operational Notice: Allocations vs Live Routing
+> [!IMPORTANT]
+> **APNIC delegated statistics describe resource allocation and assignment records. They are not a live DNS feed, a live BGP routing table, or a guaranteed physical geolocation source.**
+> A resource registered to a country code indicates where it was originally allocated by APNIC; it does not guarantee the current live physical server location or active BGP routing path.
+
+### 5. GPG Verification & Trusted Fingerprint Setup
+The verification engine performs two independent checks:
+1. **MD5 Checksum:** Verifies file transfer integrity against `delegated-apnic-latest.md5`.
+2. **OpenPGP Detached Signature:** Verified using GnuPG with an **explicitly configured trusted fingerprint**. Downloading a key from the same FTP server and trusting it automatically is strictly prohibited.
+
+#### How to verify the APNIC key fingerprint out-of-band:
+1. Obtain the APNIC public key from `CURRENT_PUBLIC_KEY` or official APNIC security documentation.
+2. Inspect its fingerprint using `gpg`:
+   ```bash
+   gpg --with-colons --import CURRENT_PUBLIC_KEY
+   gpg --fingerprint "APNIC"
+   ```
+3. Independently verify the primary key fingerprint against APNIC's official
+   security documentation or a trusted out-of-band channel. Do not copy a
+   fingerprint from a report, benchmark, or this README without completing that
+   verification.
+4. Set only the verified fingerprint in your `.env`:
+   ```env
+   APNIC_GPG_FINGERPRINT=<VERIFIED_40_CHARACTER_HEXADECIMAL_FINGERPRINT>
+   ```
+5. Place the matching APNIC public key at `data/apnic/CURRENT_PUBLIC_KEY` or set
+   `APNIC_TRUSTED_KEY_PATH` to the verified key's location.
+If `APNIC_GPG_FINGERPRINT` is left unset, the system fails safely and marks signature verification as `PENDING_KEY_CONFIGURATION`. It will never invent or automatically accept an unverified key.
+
+### 6. Environment Variables
+| Variable | Default | Purpose |
+|---|---|---|
+| `APNIC_DATA_DIR` | `data/apnic` | Base directory for downloads, processed archives, and SQLite DB |
+| `APNIC_DB_PATH` | `data/apnic/apnic.db` | Location of the SQLite database |
+| `APNIC_UPDATE_INTERVAL_HOURS` | `24` | Scheduled update interval |
+| `APNIC_REQUEST_TIMEOUT_SECONDS`| `60` | Network request timeout for HTTPS downloads |
+| `APNIC_GPG_FINGERPRINT` | `""` | Independently verified 40-character GPG fingerprint |
+| `APNIC_TRUSTED_KEY_PATH` | `data/apnic/CURRENT_PUBLIC_KEY` | Path to the trusted APNIC public key file |
+
+### 7. Running the Updater Manually & Scheduled Daemon
+- **Run one-off synchronization:**
+  ```powershell
+  python -m src.apnic.updater
+  # Force update even if MD5 sidecar matches:
+  python -m src.apnic.updater --force
+  ```
+- **Run 24-hour background daemon:**
+  ```powershell
+  python -m src.apnic.updater --daemon
+  ```
+
+### 8. Transactional Storage & Failure Recovery
+- **Safe Staging Tables:** Candidate datasets are parsed, validated, and inserted into temporary staging tables (`resources_staging`).
+- **Integrity Validation:** Record count, schema integrity, and checksums are verified before any changes touch active tables.
+- **Atomic Table Swap:** Active tables are swapped within a single SQLite transaction.
+- **Failure Recovery:** If a download, checksum, signature, parsing, or insertion step fails, the transaction rolls back, `resources_staging` is discarded, the failure is recorded in `sync_status.json`, and **the previous known-good database remains active and untouched**.
+
+### 9. Dashboard API Endpoints
+All endpoints are read-only and query local SQLite storage:
+- `GET /api/apnic/status`: Returns current dataset serial, last successful import timestamp, last update attempt, checksum and signature verification states, and last error.
+- `GET /api/apnic/summary`: Returns record counts (`total_records`, `ipv4_count`, `ipv6_count`, `asn_count`), status distribution, and top allocated country codes.
+- `GET /api/apnic/metadata`: Returns dataset name, serial, start/end date range, record count, SHA-256 provenance fingerprint, and source filename.
+
+### 10. Docker Deployment
+In `src/docker-compose.yml`, an isolated `apnic-updater` container is added to `aegis_net`:
+- `apnic-updater`: mounts `../data/apnic:/data/apnic` (read-write), runs the Python updater daemon, and executes GPG signature checks.
+- `gateway` & `dashboard`: mount `../data/apnic:/data/apnic:ro` (strictly read-only).
+- Decoupled lifecycle: If the `apnic-updater` container is stopped or restarted, the gateway and dashboard continue operating without interruption.
+
+### 11. Automated Testing Instructions
+Run the entire regression and unit test suite across Python and Node.js:
+```powershell
+python tests/run_tests.py
+```
+This executes:
+- `test_apnic_parser.py`: header, IPv4/IPv6/ASN range calculations, comment filtering, extensions, and malformed record validation.
+- `test_apnic_verifier.py`: MD5 verification, missing fingerprint safety, untrusted key rejection, and signature verification.
+- `test_apnic_database.py`: schema creation, staging imports, IPv4/IPv6/ASN lookups, metadata retrieval, and rollback safety.
+- `test_apnic_updater.py`: initial sync, unchanged dataset detection, network failures, checksum failures, and parse errors.
+- `test_network_intelligence.py`: gateway lookups, unknown IP handling, missing database resilience, and DNS message preservation.
+- `test_dashboard.js`: `/api/apnic/status`, `/api/apnic/summary`, `/api/apnic/metadata` responses.
+
+Verified current test status:
+
+- Python: `61/61` tests passed.
+- Node.js: `18` passed, `1` skipped (live MongoDB integration), `0` failed.
+- The React/Vite dashboard frontend build completed successfully.
+
+The SHA-256 provenance field reported by the APNIC metadata endpoint is
+calculated for the downloaded dataset file. It is not a substitute for OpenPGP
+signature verification. MD5 checks detect sidecar mismatch or transfer
+corruption; the signature check is required to establish authenticity.
+
+### Known Measurement and Configuration Caveats
+
+- PGP signature verification is implemented but remains inactive until
+  `APNIC_GPG_FINGERPRINT` is set to an independently verified operator trust
+  anchor.
+- The benchmark JSON record is now retained in the repository at
+  `benchmark-results.json`, together with cold/warm, throughput, and resource
+  utilization evidence. Results remain local to the test hardware and load
+  configuration.
+- Set `GATEWAY_IP` to `127.0.0.1` for loopback-only certificate/test use or to
+  the host's actual LAN IPv4 address for ESP32 access. `127.0.0.0` is not a host
+  address and must not be used.
+- ESP32 latency values include `delay(5)` retry/backoff quantization and are
+  not a sub-millisecond timing measurement; high-resolution OS or gateway
+  timings should not be inferred from ESP32 serial output alone.
+
 ## 12. References
 
 -   [RFC 4033 --- DNS Security Introduction and

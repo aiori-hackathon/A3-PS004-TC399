@@ -206,6 +206,25 @@
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
   }
+
+  /* APNIC Monitor */
+  .apnic-section { padding-block: 16px 36px; border-top: 1px solid var(--rule); }
+  .apnic-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 12px; }
+  .apnic-card { background: var(--sheet); border: 1px solid var(--rule); border-radius: 4px; padding: 18px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
+  .apnic-card h3 { font: 700 15px var(--serif); margin: 0 0 12px; color: var(--ink); border-bottom: 1px solid var(--rule); padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+  .apnic-badge { display: inline-block; padding: 3px 8px; border-radius: 3px; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; line-height: 1; }
+  .badge-verified { background: var(--verified); color: #fff; }
+  .badge-pending { background: var(--unsigned); color: #fff; }
+  .badge-failed { background: var(--failed); color: #fff; }
+  .badge-unavailable { background: var(--error); color: #fff; }
+  .badge-stale { background: var(--blocked); color: #fff; }
+  .apnic-facts { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; margin: 0; font-size: 13px; }
+  .apnic-facts dt { color: var(--ink-3); }
+  .apnic-facts dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+  .apnic-counts { display: flex; gap: 10px; margin-top: 12px; }
+  .apnic-count-box { flex: 1; background: var(--paper); border: 1px solid var(--rule); border-radius: 4px; padding: 10px 8px; text-align: center; }
+  .apnic-count-val { font: 700 18px var(--serif); color: var(--ink); display: block; }
+  .apnic-count-lbl { font: 400 11px var(--sans); color: var(--ink-3); text-transform: uppercase; letter-spacing: .05em; }
 </style>
 </head>
 <body>
@@ -313,6 +332,81 @@
           <tbody id="domainBody"></tbody>
         </table>
       </div>
+    </div>
+  </section>
+
+  <section class="apnic-section" aria-labelledby="apnicTitle">
+    <div class="section-head">
+      <div>
+        <h2 id="apnicTitle">APNIC Data Monitor</h2>
+        <p>Official APNIC delegated statistics (24h sync schedule, independent SQLite layer)</p>
+      </div>
+      <div>
+        <span id="apnicOverallState" class="apnic-badge badge-unavailable">Unavailable</span>
+      </div>
+    </div>
+
+    <div class="apnic-grid">
+      <!-- Dataset Card -->
+      <article class="apnic-card">
+        <h3>Dataset Information</h3>
+        <dl class="apnic-facts">
+          <dt>Dataset Name</dt><dd id="apnicDatasetName">delegated-apnic-latest</dd>
+          <dt>Serial Number</dt><dd id="apnicSerial">–</dd>
+          <dt>Date Range</dt><dd id="apnicDateRange">–</dd>
+          <dt>Total Records</dt><dd id="apnicTotalRecords">–</dd>
+          <dt>Freshness</dt><dd id="apnicFreshness">–</dd>
+        </dl>
+      </article>
+
+      <!-- Verification Card -->
+      <article class="apnic-card">
+        <h3>Integrity & Cryptography</h3>
+        <dl class="apnic-facts">
+          <dt>MD5 Checksum</dt>
+          <dd><span id="apnicChecksumBadge" class="apnic-badge badge-unavailable">Unavailable</span></dd>
+          <dt>PGP Signature</dt>
+          <dd><span id="apnicSigBadge" class="apnic-badge badge-unavailable">Unavailable</span></dd>
+          <dt>Trusted Key Setup</dt>
+          <dd><span id="apnicKeyStatusBadge" class="apnic-badge badge-pending">Pending Setup</span></dd>
+          <dt>SHA-256 Provenance</dt>
+          <dd id="apnicSha256" style="font-family:monospace; font-size:11px;">–</dd>
+        </dl>
+      </article>
+
+      <!-- Resource Statistics Card -->
+      <article class="apnic-card">
+        <h3>Allocated Resources</h3>
+        <div class="apnic-counts">
+          <div class="apnic-count-box">
+            <span class="apnic-count-val" id="apnicIpv4">–</span>
+            <span class="apnic-count-lbl">IPv4</span>
+          </div>
+          <div class="apnic-count-box">
+            <span class="apnic-count-val" id="apnicIpv6">–</span>
+            <span class="apnic-count-lbl">IPv6</span>
+          </div>
+          <div class="apnic-count-box">
+            <span class="apnic-count-val" id="apnicAsn">–</span>
+            <span class="apnic-count-lbl">ASN</span>
+          </div>
+        </div>
+        <dl class="apnic-facts" style="margin-top:14px;">
+          <dt>Active Statuses</dt><dd id="apnicStatusSummary">–</dd>
+          <dt>Top Country Codes</dt><dd id="apnicTopCountries">–</dd>
+        </dl>
+      </article>
+
+      <!-- Update Monitoring Card -->
+      <article class="apnic-card">
+        <h3>Sync & Health</h3>
+        <dl class="apnic-facts">
+          <dt>Last Sync Success</dt><dd id="apnicLastSync">–</dd>
+          <dt>Last Update Attempt</dt><dd id="apnicLastAttempt">–</dd>
+          <dt>Update Pipeline</dt><dd id="apnicUpdateState">–</dd>
+          <dt>Last Error</dt><dd id="apnicLastError" style="color:var(--failed);">None</dd>
+        </dl>
+      </article>
     </div>
   </section>
 
@@ -823,6 +917,108 @@
     download(`aegisdns-${stamp()}.jsonl`, 'application/x-ndjson', lines.join('\n') + '\n');
   });
 
+  /* ---------- APNIC monitor ---------- */
+  async function updateApnicMonitor() {
+    try {
+      const [statusRes, summaryRes, metaRes] = await Promise.all([
+        fetch('/api/apnic/status').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/apnic/summary').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/apnic/metadata').then(r => r.ok ? r.json() : null).catch(() => null),
+      ]);
+
+      if (!statusRes && !summaryRes && !metaRes) {
+        setApnicBadge($('apnicOverallState'), 'Unavailable', 'unavailable');
+        return;
+      }
+
+      // Metadata
+      if (metaRes && metaRes.serial_number) {
+        $('apnicSerial').textContent = metaRes.serial_number;
+        $('apnicDateRange').textContent = `${metaRes.start_date || '–'} to ${metaRes.end_date || '–'}`;
+        $('apnicTotalRecords').textContent = Number(metaRes.record_count || 0).toLocaleString();
+        $('apnicSha256').textContent = metaRes.sha256_fingerprint ? `${metaRes.sha256_fingerprint.slice(0, 16)}…` : '–';
+        $('apnicSha256').title = metaRes.sha256_fingerprint || '';
+      } else {
+        $('apnicSerial').textContent = 'None';
+        $('apnicDateRange').textContent = '–';
+        $('apnicTotalRecords').textContent = '0';
+        $('apnicSha256').textContent = '–';
+      }
+
+      // Freshness
+      let isStale = false;
+      if (statusRes && statusRes.last_successful_import) {
+        const importDate = new Date(statusRes.last_successful_import);
+        const ageHours = (Date.now() - importDate.getTime()) / (1000 * 3600);
+        $('apnicLastSync').textContent = importDate.toLocaleString();
+        if (ageHours > 36) {
+          isStale = true;
+          $('apnicFreshness').textContent = `Stale (${Math.round(ageHours)}h ago)`;
+        } else {
+          $('apnicFreshness').textContent = `Fresh (${Math.round(ageHours)}h ago)`;
+        }
+      } else {
+        $('apnicLastSync').textContent = 'Never';
+        $('apnicFreshness').textContent = 'No data';
+      }
+
+      // Checksum & Signature badges
+      const chk = statusRes ? statusRes.checksum_verification_status : 'UNAVAILABLE';
+      const sig = statusRes ? statusRes.signature_verification_status : 'UNAVAILABLE';
+
+      setApnicBadge($('apnicChecksumBadge'), chk === 'VERIFIED' ? 'Verified' : (chk === 'FAILED' ? 'Failed' : 'Unavailable'), chk.toLowerCase());
+      setApnicBadge($('apnicSigBadge'), sig === 'VERIFIED' ? 'Verified' : (sig === 'PENDING_KEY_CONFIGURATION' ? 'Pending Key' : (sig === 'FAILED' ? 'Failed' : 'Unavailable')), sig === 'PENDING_KEY_CONFIGURATION' ? 'pending' : sig.toLowerCase());
+
+      // Trusted Key Setup badge
+      const keyConfigured = statusRes && statusRes.trusted_key_configured;
+      setApnicBadge($('apnicKeyStatusBadge'), keyConfigured ? 'Configured' : 'Pending Key Setup', keyConfigured ? 'verified' : 'pending');
+
+      // Overall Composite State: Only Verified after both checksum and signature succeed!
+      if (chk === 'VERIFIED' && sig === 'VERIFIED') {
+        if (isStale) {
+          setApnicBadge($('apnicOverallState'), 'Stale', 'stale');
+        } else {
+          setApnicBadge($('apnicOverallState'), 'Verified', 'verified');
+        }
+      } else if (chk === 'FAILED' || sig === 'FAILED') {
+        setApnicBadge($('apnicOverallState'), 'Failed', 'failed');
+      } else if (sig === 'PENDING_KEY_CONFIGURATION') {
+        setApnicBadge($('apnicOverallState'), 'Pending Key', 'pending');
+      } else {
+        setApnicBadge($('apnicOverallState'), 'Unavailable', 'unavailable');
+      }
+
+      // Resource Counts
+      if (summaryRes) {
+        $('apnicIpv4').textContent = Number(summaryRes.ipv4_count || 0).toLocaleString();
+        $('apnicIpv6').textContent = Number(summaryRes.ipv6_count || 0).toLocaleString();
+        $('apnicAsn').textContent = Number(summaryRes.asn_count || 0).toLocaleString();
+
+        const statuses = Object.entries(summaryRes.by_status || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
+        $('apnicStatusSummary').textContent = statuses || '–';
+
+        const topCcs = Object.entries(summaryRes.top_countries || {}).slice(0, 5).map(([cc, n]) => `${cc} (${n})`).join(', ');
+        $('apnicTopCountries').textContent = topCcs || '–';
+      }
+
+      // Sync & Health
+      if (statusRes) {
+        $('apnicLastAttempt').textContent = statusRes.last_update_attempt ? new Date(statusRes.last_update_attempt).toLocaleString() : '–';
+        $('apnicUpdateState').textContent = statusRes.current_update_status || 'IDLE';
+        $('apnicLastError').textContent = statusRes.last_error || 'None';
+        $('apnicLastError').style.color = statusRes.last_error ? 'var(--failed)' : 'var(--ink-2)';
+      }
+    } catch (err) {
+      console.warn('Could not update APNIC monitor:', err);
+    }
+  }
+
+  function setApnicBadge(el, text, state) {
+    if (!el) return;
+    el.textContent = text;
+    el.className = `apnic-badge badge-${state}`;
+  }
+
   /* ---------- clock ---------- */
   function tick() {
     const s = Math.floor((Date.now() - state.start) / 1000), p = n => String(n).padStart(2, '0');
@@ -841,6 +1037,8 @@
 
   /* ---------- init ---------- */
   buildTally(); buildChips(); renderTally(); renderPathCounts(); renderFigures(); renderDomains(); renderLedger(); buildChart(); updatePauseLabel(); tick();
+  updateApnicMonitor();
+  setInterval(updateApnicMonitor, 30000);
   if (demo) startDemo();
 })();
 </script>

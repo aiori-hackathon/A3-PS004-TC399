@@ -1,0 +1,6 @@
+# Requirements for APNIC Network Intelligence Layer
+# Core functionality relies on Python standard library (sqlite3, ipaddress, urllib, hashlib).
+# Optional companion packages:
+requests>=2.31.0,<3
+aiohttp>=3.10.0,<4
+python-dotenv>=1.0.0

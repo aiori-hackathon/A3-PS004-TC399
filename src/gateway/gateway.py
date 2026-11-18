@@ -24,6 +24,16 @@ import dns.rcode
 import dns.rdatatype
 import psutil
 
+try:
+    from network_intelligence import NetworkIntelligence
+    network_intel = NetworkIntelligence()
+except ImportError:
+    try:
+        from src.gateway.network_intelligence import NetworkIntelligence
+        network_intel = NetworkIntelligence()
+    except ImportError:
+        network_intel = None
+
 HOST = "0.0.0.0"
 PORT = 853
 RESOLVER_HOST = os.getenv("RESOLVER_HOST", "127.0.0.1")
@@ -232,11 +242,21 @@ async def process_query(
 
         response, status = process_policy(query, upstream)
         ede_info = extract_ede_info(upstream)
+
+        # APNIC network intelligence enrichment (supplementary only; never alters DNSSEC verdict or response)
+        apnic_enrichment = []
+        if network_intel is not None:
+            try:
+                apnic_enrichment = network_intel.extract_answers_and_enrich(upstream)
+            except Exception as exc:
+                print(f"[APNIC] Intelligence lookup error: {exc}", flush=True)
+
+        log_apnic = f", APNIC={json.dumps(apnic_enrichment)}" if apnic_enrichment else ""
         print(
             f"[DNS] {qname} {qtype}: "
             f"rcode={dns.rcode.to_text(upstream.rcode())}, "
             f"AD={int(bool(upstream.flags & dns.flags.AD))}, status={status}, "
-            f"EDE={json.dumps(ede_info)}",
+            f"EDE={json.dumps(ede_info)}{log_apnic}",
             flush=True,
         )
         return response.to_wire()
@@ -260,6 +280,8 @@ async def process_query(
             "client": client[:64],
             "ede_info": ede_info,
         }
+        if "apnic_enrichment" in locals() and apnic_enrichment:
+            metric["apnic"] = apnic_enrichment
         print(json.dumps(metric), flush=True)
         asyncio.create_task(publish_metrics(session, metric))
 

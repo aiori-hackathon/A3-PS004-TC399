@@ -1,4 +1,5 @@
 import { useMetrics } from '@/context/MetricsContext';
+import { ApnicMonitor } from '@/components/monitor/ApnicMonitor';
 import { EventHistory } from '@/components/monitor/EventHistory';
 import { LatencyChart } from '@/components/monitor/LatencyChart';
 import { LatestVerdict } from '@/components/monitor/LatestVerdict';
@@ -78,9 +79,21 @@ export function MonitorDashboard() {
         </Reveal>
 
         <Reveal>
-          <section id="events" className="scroll-mt-24 space-y-10">
+          <section id="apnic" className="scroll-mt-24 space-y-10">
             <SectionHeader
               index="05"
+              eyebrow="APNIC network intelligence"
+              title="Official delegated resource allocations"
+              description="Ingested on a 24-hour cycle from APNIC. This data provides supplementary intelligence to the gateway and dashboard and is strictly decoupled from the DNSSEC validation chain."
+            />
+            <ApnicMonitor />
+          </section>
+        </Reveal>
+
+        <Reveal>
+          <section id="events" className="scroll-mt-24 space-y-10">
+            <SectionHeader
+              index="06"
               eyebrow="Gateway event history"
               title="Recent DNS requests recorded by the gateway"
               description="Each entry represents one metric returned by the existing gateway metrics API. No serial-side or synthetic events are added."
