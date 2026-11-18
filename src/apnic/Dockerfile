@@ -1,18 +1,18 @@
 FROM python:3.12-slim
 
-# Install GnuPG and CA certificates for OpenPGP signature verification and HTTPS downloads
+# GnuPG for OpenPGP verification and CA certificates for HTTPS
 RUN apt-get update && \
     apt-get install -y --no-install-recommends gnupg ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Install Python requirements
-COPY requirements.txt /app/src/apnic/requirements.txt
+# Copy and install APNIC dependencies
+COPY src/apnic/requirements.txt /app/src/apnic/requirements.txt
 RUN pip install --no-cache-dir -r /app/src/apnic/requirements.txt
 
-# Copy source code
-COPY . /app/src/apnic
+# Copy only the APNIC Python package
+COPY src/apnic/ /app/src/apnic/
 
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1

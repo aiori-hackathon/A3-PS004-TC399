@@ -7,7 +7,9 @@ AegisDNS is a lab prototype that allows a resource-constrained IoT
 client to send DNS queries through an authenticated gateway. The gateway
 forwards queries to a trusted Unbound resolver that performs DNSSEC
 validation, applies an explicit policy to the result, and publishes
-telemetry to a live web dashboard.
+telemetry to a live web dashboard. A separate APNIC Network Intelligence
+Layer provides read-only IP allocation metadata for monitoring; it does not
+participate in DNS resolution or DNSSEC verdict decisions.
 
 **Introductory video:** https://youtu.be/FeKZ9_0cWfo
 **Live Working Demo video** https://youtu.be/X0fRskhgpoM?si=rnq5qApaaiQZneeC
@@ -1015,6 +1017,40 @@ In `src/docker-compose.yml`, an isolated `apnic-updater` container is added to `
 - `gateway` & `dashboard`: mount `../data/apnic:/data/apnic:ro` (strictly read-only).
 - Decoupled lifecycle: If the `apnic-updater` container is stopped or restarted, the gateway and dashboard continue operating without interruption.
 
+The updater image uses the repository root as its build context and runs
+`python -m src.apnic.updater --daemon` from `/app`. Build and operate it from
+the repository root:
+
+```powershell
+docker compose --env-file .env -f src/docker-compose.yml build apnic-updater
+docker compose --env-file .env -f src/docker-compose.yml up -d apnic-updater
+docker compose --env-file .env -f src/docker-compose.yml ps apnic-updater
+docker compose --env-file .env -f src/docker-compose.yml logs --tail 100 apnic-updater
+```
+
+To check the read-only dashboard APIs from PowerShell:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:3001/api/apnic/status
+Invoke-RestMethod http://127.0.0.1:3001/api/apnic/summary
+Invoke-RestMethod http://127.0.0.1:3001/api/apnic/metadata
+```
+
+### Observed local dataset and updater status
+
+The local APNIC dataset snapshot observed on 19 November 2026 has serial
+`20261119` and `89,809` resource records: `58,433` IPv4, `17,350` IPv6, and
+`14,026` ASN records. The five largest country-code groups in that snapshot
+were AU (`14,494`), IN (`13,293`), CN (`11,447`), ID (`9,869`), and BD
+(`6,083`). Counts change when APNIC publishes a new dataset.
+
+The recorded updater status is `SUCCESS`, with checksum `VERIFIED`,
+signature status `PENDING_KEY_CONFIGURATION`, and no trusted fingerprint
+configured. The updater container was observed running. An MD5 match verifies
+the downloaded bytes against the APNIC sidecar; it does not authenticate the
+publisher. Do not describe the active dataset as PGP-authenticated until the
+operator-configured trust chain verifies its detached signature.
+
 ### 11. Automated Testing Instructions
 Run the entire regression and unit test suite across Python and Node.js:
 ```powershell
@@ -1033,6 +1069,14 @@ Verified current test status:
 - Python: `61/61` tests passed.
 - Node.js: `18` passed, `1` skipped (live MongoDB integration), `0` failed.
 - The React/Vite dashboard frontend build completed successfully.
+
+Remaining APNIC validation work includes independently verifying and
+configuring APNIC's signing-key fingerprint, confirming a successful detached
+signature using that configured trust anchor, and exercising long-running
+scheduled updates and failed-update recovery end to end. The previous gateway
+bogus-DNSSEC test-recorder mismatch also remains a separate investigation item;
+it must not be presented as an APNIC feature or as resolved by APNIC
+enrichment.
 
 The SHA-256 provenance field reported by the APNIC metadata endpoint is
 calculated for the downloaded dataset file. It is not a substitute for OpenPGP
