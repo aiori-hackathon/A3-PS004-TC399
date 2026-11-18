@@ -61,3 +61,5 @@ src/dashboard/public/index.backup.html
 src/esp32/include/secrets.h
 src/esp32/include/certs.h
 src/esp32/.pio/
+
+src/commands.md

@@ -1,3 +1,4 @@
+import importlib.util
 import sys
 import unittest
 from pathlib import Path
@@ -8,7 +9,11 @@ sys.path.insert(0, str(ROOT / "src" / "tools"))
 
 import latency_baseline
 import serial_to_dashboard
-import test_gateway
+
+SCRIPT_GATEWAY_PATH = ROOT / "src" / "scripts" / "test_gateway.py"
+_spec = importlib.util.spec_from_file_location("gateway_script", SCRIPT_GATEWAY_PATH)
+test_gateway = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(test_gateway)
 
 
 class TestExpectationModelTests(unittest.TestCase):

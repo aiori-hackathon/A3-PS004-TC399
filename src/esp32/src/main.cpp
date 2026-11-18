@@ -17,6 +17,62 @@ using TlsClient = NetworkClientSecure;
 #include <time.h>
 #include <string.h>
 #include <esp_system.h>
+#include <esp_freertos_hooks.h>
+
+static volatile uint32_t s_idle_ticks = 0;
+static uint32_t s_last_cpu_sample_ms = 0;
+static uint32_t s_max_idle_rate = 0;
+static float s_cpu_percent = 0.0f;
+
+static bool idle_hook(void) {
+  s_idle_ticks++;
+  return true;
+}
+
+static void initCpuMonitor() {
+  esp_register_freertos_idle_hook(idle_hook);
+  s_last_cpu_sample_ms = millis();
+}
+
+static float getCpuLoadPercent() {
+  uint32_t now = millis();
+  uint32_t elapsed = now - s_last_cpu_sample_ms;
+  if (elapsed >= 1000) {
+    uint32_t ticks = s_idle_ticks;
+    s_idle_ticks = 0;
+    s_last_cpu_sample_ms = now;
+    uint32_t rate = (ticks * 1000UL) / elapsed;
+    if (rate > s_max_idle_rate) {
+      s_max_idle_rate = rate;
+    }
+    if (s_max_idle_rate > 0) {
+      float idle_fraction = (float)rate / (float)s_max_idle_rate;
+      if (idle_fraction > 1.0f) idle_fraction = 1.0f;
+      s_cpu_percent = (1.0f - idle_fraction) * 100.0f;
+    } else {
+      s_cpu_percent = 0.0f;
+    }
+  }
+  return s_cpu_percent;
+}
+
+struct MemoryStats {
+  uint32_t totalHeap;
+  uint32_t freeHeap;
+  uint32_t minFreeHeap;
+  uint32_t usedHeap;
+  float ramPercent;
+};
+
+static MemoryStats getMemoryStats() {
+  MemoryStats stats;
+  stats.totalHeap = ESP.getHeapSize();
+  stats.freeHeap = ESP.getFreeHeap();
+  stats.minFreeHeap = ESP.getMinFreeHeap();
+  stats.usedHeap = (stats.totalHeap >= stats.freeHeap) ? (stats.totalHeap - stats.freeHeap) : 0;
+  stats.ramPercent = (stats.totalHeap > 0) ? (((float)stats.usedHeap / (float)stats.totalHeap) * 100.0f) : 0.0f;
+  return stats;
+}
 
 static const char* NAMES[] = {"valid.aegis.test", "bogus.aegis.test", "insecure.aegis.test"};
 static const size_t NAME_COUNT = sizeof(NAMES) / sizeof(NAMES[0]);
@@ -107,13 +163,20 @@ static bool runQuery(const char* name) {
 
   uint8_t rcode = header[3] & 0x0F;
   bool ad = header[3] & 0x20;
-  Serial.printf("RESULT,%s,%s,rcode=%u,AD=%d,id_match=1,latency_ms=%.2f,free_heap=%u\n",
-                name, rcodeName(rcode), rcode, ad, us / 1000.0, (unsigned)ESP.getFreeHeap());
+  MemoryStats mem = getMemoryStats();
+  float cpu = getCpuLoadPercent();
+  Serial.printf("RESULT,%s,%s,rcode=%u,AD=%d,id_match=1,latency_ms=%.2f,free_heap=%u,CPU=%.1f%%,HEAP=%u/%u\n",
+                name, rcodeName(rcode), rcode, ad, us / 1000.0,
+                (unsigned)mem.freeHeap, cpu, (unsigned)mem.usedHeap, (unsigned)mem.totalHeap);
   return true;
 }
 
 static void runRound() {
-  Serial.printf("\n--- round start, free_heap=%u ---\n", (unsigned)ESP.getFreeHeap());
+  MemoryStats memStart = getMemoryStats();
+  float cpuStart = getCpuLoadPercent();
+  Serial.printf("\n--- round start, free_heap=%u, min_free=%u, CPU=%.1f%%, HEAP=%u/%u (%.1f%% used) ---\n",
+                (unsigned)memStart.freeHeap, (unsigned)memStart.minFreeHeap, cpuStart,
+                (unsigned)memStart.usedHeap, (unsigned)memStart.totalHeap, memStart.ramPercent);
   tls.setCACert(CA_CERT);
   tls.setCertificate(CLIENT_CERT);
   tls.setPrivateKey(CLIENT_KEY);
@@ -126,8 +189,11 @@ static void runRound() {
     Serial.printf("TLS_CONNECT_FAILED,code=%d,%s (no fallback attempted)\n", code, err);
     return;
   }
-  Serial.printf("TLS_HANDSHAKE_OK,handshake_ms=%lu,free_heap=%u\n",
-                (unsigned long)(millis() - t0), (unsigned)ESP.getFreeHeap());
+  MemoryStats memHs = getMemoryStats();
+  float cpuHs = getCpuLoadPercent();
+  Serial.printf("TLS_HANDSHAKE_OK,handshake_ms=%lu,free_heap=%u,CPU=%.1f%%,HEAP=%u/%u\n",
+                (unsigned long)(millis() - t0), (unsigned)memHs.freeHeap, cpuHs,
+                (unsigned)memHs.usedHeap, (unsigned)memHs.totalHeap);
   for (size_t i = 0; i < NAME_COUNT; i++) {
     if (!runQuery(NAMES[i])) { tls.stop(); return; }
   }
@@ -137,6 +203,7 @@ static void runRound() {
 void setup() {
   Serial.begin(115200);
   delay(500);
+  initCpuMonitor();
   Serial.println("AegisDNS ESP32 client starting");
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);

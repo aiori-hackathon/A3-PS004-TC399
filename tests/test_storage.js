@@ -70,6 +70,26 @@ test('memory store keys metrics by client CN, supports device filtering, and lis
     devices.map((d) => d.deviceId).sort(),
     ['esp32-lab-1', 'esp32-lab-2'],
   );
+
+  // Test hardware metrics persistence in memory store
+  store.saveTelemetry({
+    id: 't1',
+    timestamp: '2026-11-18T10:00:10.000Z',
+    deviceId: 'esp32-lab-1',
+    kind: 'tls_handshake',
+    latency_ms: 85,
+    cpu_percent: 24.5,
+    ram_used_bytes: 125000,
+    ram_total_bytes: 327680,
+    free_heap_bytes: 202680,
+    free_heap: 202680,
+  });
+  const tEvents = store.getTelemetry({ device: 'esp32-lab-1' });
+  assert.equal(tEvents.length, 1);
+  assert.equal(tEvents[0].cpu_percent, 24.5);
+  assert.equal(tEvents[0].ram_used_bytes, 125000);
+  assert.equal(tEvents[0].ram_total_bytes, 327680);
+  assert.equal(tEvents[0].free_heap_bytes, 202680);
 });
 
 test('mongo store buffers writes when degraded and replays without duplicates on recovery', async () => {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityChart, LatencyChart } from '@/components/Charts';
+import { ClientHardwareHealth } from '@/components/ClientHardwareHealth';
 import { LogTable } from '@/components/LogTable';
 import { DevicePanel, LatestLookup, SecurityEvents, TopTable } from '@/components/Panels';
 import { MetricsProvider, useMetrics } from '@/context/MetricsContext';
@@ -133,7 +134,7 @@ function Dashboard() {
         )}
 
         <nav aria-label="Dashboard sections" className="flex flex-wrap gap-2 text-xs">
-          {[['#overview', 'Overview'], ['#activity', 'Activity'], ['#events', 'Security & device'], ['#queries', 'Lookup log']].map(([href, label]) => (
+          {[['#overview', 'Overview'], ['#activity', 'Activity'], ['#events', 'Security & device'], ['#hardware', 'Hardware health'], ['#queries', 'Lookup log']].map(([href, label]) => (
             <a key={href} href={href} className="rounded-full border border-line bg-panel px-3 py-1.5 text-mute transition-colors hover:border-accent hover:text-ink">{label}</a>
           ))}
         </nav>
@@ -162,6 +163,12 @@ function Dashboard() {
           <DevicePanel device={device} />
           <TopTable metrics={view} />
         </div>
+
+        <ClientHardwareHealth
+          device={device}
+          activeDevice={activeDevice}
+          selectedDevice={selectedDevice}
+        />
 
         <LogTable
           metrics={view}

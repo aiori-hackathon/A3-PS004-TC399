@@ -138,6 +138,58 @@ test('rejects invalid telemetry kinds, string numbers, negative values, and inva
   }
 });
 
+test('validates and clamps hardware telemetry fields in device telemetry', () => {
+  const valid = validateTelemetryPayload({
+    kind: 'tls_handshake',
+    latency_ms: 85,
+    cpu_percent: 135.2, // should be clamped to 100
+    ram_used_bytes: 124500,
+    ram_total_bytes: 327680,
+    free_heap_bytes: 203180,
+    deviceId: 'esp32-node-01',
+    schemaVersion: 2,
+  });
+  assert.equal(valid.ok, true);
+  assert.equal(valid.data.cpu_percent, 100);
+  assert.equal(valid.data.ram_used_bytes, 124500);
+  assert.equal(valid.data.ram_total_bytes, 327680);
+  assert.equal(valid.data.free_heap_bytes, 203180);
+  assert.equal(valid.data.free_heap, 203180);
+  assert.equal(valid.data.deviceId, 'esp32-node-01');
+
+  // Test clamping below 0
+  const lowCpu = validateTelemetryPayload({
+    kind: 'dns_result',
+    query: 'valid.aegis.test',
+    rcode: 'NOERROR',
+    ad: 1,
+    id_match: 1,
+    latency_ms: 10,
+    cpu_percent: -10,
+    ram_used_bytes: 50000,
+    ram_total_bytes: 320000,
+    free_heap_bytes: 270000,
+  });
+  assert.equal(lowCpu.ok, true);
+  assert.equal(lowCpu.data.cpu_percent, 0);
+
+  // Test rejection of non-positive integers
+  const badHardware = [
+    { kind: 'tls_handshake', latency_ms: 10, free_heap: 100, ram_used_bytes: -1 },
+    { kind: 'tls_handshake', latency_ms: 10, free_heap: 100, ram_used_bytes: 0 },
+    { kind: 'tls_handshake', latency_ms: 10, free_heap: 100, ram_used_bytes: 12.5 },
+    { kind: 'tls_handshake', latency_ms: 10, free_heap: 100, ram_total_bytes: -500 },
+    { kind: 'tls_handshake', latency_ms: 10, free_heap: 100, ram_total_bytes: 0 },
+    { kind: 'tls_handshake', latency_ms: 10, free_heap: 100, free_heap_bytes: -100 },
+    { kind: 'tls_handshake', latency_ms: 10, free_heap: 100, free_heap_bytes: 0 },
+  ];
+  for (const bad of badHardware) {
+    const res = validateTelemetryPayload(bad);
+    assert.equal(res.ok, false, `Expected rejection for ${JSON.stringify(bad)}`);
+    assert.ok(Array.isArray(res.issues) && res.issues.length > 0);
+  }
+});
+
 test('validates test run payloads', () => {
   const ok = validateTestRunPayload({
     runId: 'run-123',

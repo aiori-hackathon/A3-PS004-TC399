@@ -74,12 +74,18 @@ export const DevicePanel = memo(function DevicePanel({ device }: { device: Devic
   const hs = device.filter((d) => d.kind === 'tls_handshake');
   const fails = device.filter((d) => d.kind === 'tls_failure').length;
   const bridge = device.find((d) => d.kind === 'serial_status');
-  const heap = device.find((d) => Number.isFinite(d.free_heap));
+  const heap = device.find((d) => Number.isFinite(d.free_heap_bytes ?? d.free_heap));
+  const latestHardware = device.find((d) => d.cpu_percent != null || d.ram_used_bytes != null);
   const mean = hs.length ? hs.reduce((a, d) => a + (d.latency_ms ?? 0), 0) / hs.length : 0;
+  const freeBytes = heap?.free_heap_bytes ?? heap?.free_heap;
   const rows: [string, React.ReactNode][] = [
     ['TLS handshake (last / mean)', hs.length ? `${Math.round(hs[0].latency_ms ?? 0)} / ${Math.round(mean)} ms` : '–'],
     ['TLS connection failures', fails ? <b className="text-[#ff5c6c]">{fails}</b> : '0'],
-    ['Free heap', heap ? `${heap.free_heap!.toLocaleString()} B` : '–'],
+    ['Client CPU', latestHardware?.cpu_percent != null ? `${latestHardware.cpu_percent.toFixed(1)}%` : '–'],
+    ['RAM (used / total)', latestHardware?.ram_used_bytes != null && latestHardware?.ram_total_bytes != null
+      ? `${(latestHardware.ram_used_bytes / 1024).toFixed(1)} / ${(latestHardware.ram_total_bytes / 1024).toFixed(1)} KB`
+      : '–'],
+    ['Free heap', freeBytes != null ? `${freeBytes.toLocaleString()} B` : '–'],
     ['Serial bridge', bridge ? (bridge.connected ? `connected ${bridge.port}` : 'disconnected') : '–'],
   ];
   return (

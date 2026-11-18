@@ -35,6 +35,10 @@ export interface DeviceEvent {
   rcode?: string;
   ad?: boolean;
   id_match?: boolean;
+  cpu_percent?: number;
+  ram_used_bytes?: number;
+  ram_total_bytes?: number;
+  free_heap_bytes?: number;
 }
 
 export interface DeviceSummary {

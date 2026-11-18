@@ -114,6 +114,7 @@ function createMongoStore(options) {
 
     const col = db.collection(name);
     await col.createIndex({ deviceId: 1, timestamp: -1 });
+    await col.createIndex({ deviceId: 1, timestamp: 1 });
     await col.createIndex({ id: 1 });
     for (const idx of extraIndexes || []) {
       await col.createIndex(idx.spec, idx.options || {});

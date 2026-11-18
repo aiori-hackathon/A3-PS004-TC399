@@ -108,6 +108,28 @@ test('accepts and broadcasts valid device telemetry', () => {
   assert.equal(emitted.at(-1)[1].free_heap, 32000);
 });
 
+test('accepts and broadcasts valid device telemetry with hardware metrics', () => {
+  const response = request('POST', '/api/device/telemetry', {
+    kind: 'tls_handshake',
+    latency_ms: 120,
+    cpu_percent: 25.5,
+    ram_used_bytes: 125000,
+    ram_total_bytes: 327680,
+    free_heap_bytes: 202680,
+    deviceId: 'esp32-client',
+    schemaVersion: 2,
+  });
+
+  assert.equal(response.status, 202);
+  assert.equal(response.body.accepted, true);
+  assert.equal(emitted.at(-1)[0], 'device_telemetry');
+  const event = emitted.at(-1)[1];
+  assert.equal(event.cpu_percent, 25.5);
+  assert.equal(event.ram_used_bytes, 125000);
+  assert.equal(event.ram_total_bytes, 327680);
+  assert.equal(event.free_heap_bytes, 202680);
+});
+
 test('rejects invalid device telemetry payloads', () => {
   assert.equal(request('POST', '/api/device/telemetry', null).status, 400);
   assert.equal(

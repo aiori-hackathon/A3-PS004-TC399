@@ -49,7 +49,21 @@ function toDevice(v: unknown): DeviceEvent | null {
   const deviceId = typeof v.deviceId === 'string' && v.deviceId.trim()
     ? normalizeDeviceId(v.deviceId)
     : 'unknown';
-  return { ...(v as unknown as DeviceEvent), deviceId, ts: Number.isFinite(ts) ? ts : Date.now() };
+  const free_heap_bytes = typeof v.free_heap_bytes === 'number'
+    ? v.free_heap_bytes
+    : typeof v.free_heap === 'number'
+      ? v.free_heap
+      : undefined;
+  const free_heap = typeof v.free_heap === 'number'
+    ? v.free_heap
+    : free_heap_bytes;
+  return {
+    ...(v as unknown as DeviceEvent),
+    deviceId,
+    ts: Number.isFinite(ts) ? ts : Date.now(),
+    free_heap,
+    free_heap_bytes,
+  };
 }
 
 function toDeviceSummary(v: unknown): DeviceSummary | null {

@@ -22,6 +22,19 @@ const nonNegInt = z
     message: 'Must be a non-negative integer',
   });
 
+const positiveInt = z
+  .number()
+  .refine((n) => Number.isInteger(n) && n > 0, {
+    message: 'Must be a positive integer',
+  });
+
+const clampedCpuPercent = z
+  .number()
+  .refine((n) => Number.isFinite(n), {
+    message: 'Must be a finite number',
+  })
+  .transform((n) => Math.max(0, Math.min(100, n)));
+
 // Accept strict boolean OR integer 0/1 and normalise to boolean for storage/UI.
 const boolOrZeroOne = z
   .union([z.boolean(), z.literal(0), z.literal(1)])
@@ -80,6 +93,10 @@ const telemetryBaseShape = {
     .max(100)
     .optional()
     .default(1),
+  cpu_percent: clampedCpuPercent.optional(),
+  ram_used_bytes: positiveInt.optional(),
+  ram_total_bytes: positiveInt.optional(),
+  free_heap_bytes: positiveInt.optional(),
 };
 
 const serialStatusSchema = z.object({
@@ -93,7 +110,7 @@ const tlsHandshakeSchema = z.object({
   ...telemetryBaseShape,
   kind: z.literal('tls_handshake'),
   latency_ms: finiteNonNegNumber,
-  free_heap: nonNegInt,
+  free_heap: nonNegInt.optional(),
 });
 
 const tlsFailureSchema = z.object({
@@ -110,7 +127,7 @@ const dnsResultSchema = z.object({
   ad: boolOrZeroOne,
   id_match: boolOrZeroOne,
   latency_ms: finiteNonNegNumber,
-  free_heap: nonNegInt,
+  free_heap: nonNegInt.optional(),
 });
 
 const telemetryByKind = {
@@ -234,6 +251,23 @@ function validateTelemetryPayload(input) {
     schemaVersion: data.schemaVersion,
     receivedAt: nowIso,
   };
+  if (data.cpu_percent !== undefined) {
+    normalized.cpu_percent = data.cpu_percent;
+  }
+  if (data.ram_used_bytes !== undefined) {
+    normalized.ram_used_bytes = data.ram_used_bytes;
+  }
+  if (data.ram_total_bytes !== undefined) {
+    normalized.ram_total_bytes = data.ram_total_bytes;
+  }
+  if (data.free_heap_bytes !== undefined) {
+    normalized.free_heap_bytes = data.free_heap_bytes;
+    if (normalized.free_heap === undefined) {
+      normalized.free_heap = data.free_heap_bytes;
+    }
+  } else if (data.free_heap !== undefined) {
+    normalized.free_heap_bytes = data.free_heap;
+  }
   return { ok: true, data: normalized };
 }
 

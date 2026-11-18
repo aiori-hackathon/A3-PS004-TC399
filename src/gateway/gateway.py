@@ -29,6 +29,10 @@ PORT = 853
 RESOLVER_HOST = os.getenv("RESOLVER_HOST", "127.0.0.1")
 RESOLVER_PORT = int(os.getenv("RESOLVER_PORT", "53"))
 METRICS_URL = os.getenv("METRICS_URL", "http://localhost:3000/api/metrics")
+DEVICE_TELEMETRY_URL = os.getenv(
+    "DEVICE_TELEMETRY_URL",
+    METRICS_URL.replace("/api/metrics", "/api/device/telemetry"),
+)
 TLS_CERT = os.getenv("TLS_CERT", "certs/server.crt")
 TLS_KEY = os.getenv("TLS_KEY", "certs/server.key")
 CLIENT_CA = os.getenv("CLIENT_CA", "certs/rootCA.crt")
@@ -122,6 +126,67 @@ async def publish_metrics(
         print(f"[METRICS] Delivery failed: {exc}", flush=True)
 
 
+async def publish_device_telemetry(
+    session: aiohttp.ClientSession, payload: dict
+) -> None:
+    """Best-effort device telemetry forwarding to dashboard."""
+    if not session:
+        return
+    try:
+        timeout = aiohttp.ClientTimeout(total=2.0)
+        async with session.post(
+            DEVICE_TELEMETRY_URL, json=payload, timeout=timeout
+        ) as response:
+            if response.status >= 400:
+                print(
+                    f"[TELEMETRY] Dashboard returned HTTP {response.status}",
+                    flush=True,
+                )
+    except Exception as exc:
+        print(f"[TELEMETRY] Delivery failed: {exc}", flush=True)
+
+
+def parse_custom_telemetry_frame(data: bytes, client: str) -> dict | None:
+    """Detect and parse custom device hardware telemetry frames."""
+    if not data or not data.startswith(b"{"):
+        return None
+    try:
+        payload = json.loads(data.decode("utf-8"))
+        if isinstance(payload, dict):
+            if "deviceId" not in payload:
+                payload["deviceId"] = client
+            if "schemaVersion" not in payload:
+                payload["schemaVersion"] = 2
+            if "timestamp" not in payload:
+                payload["timestamp"] = datetime.now(timezone.utc).isoformat()
+            if "kind" not in payload:
+                payload["kind"] = "serial_status"
+                payload.setdefault("connected", True)
+                payload.setdefault("port", "tls-client")
+            return payload
+    except Exception:
+        pass
+    return None
+
+
+def extract_device_telemetry_from_query(
+    query: dns.message.Message, client: str
+) -> dict | None:
+    """Extract hardware telemetry from client EDNS options if supplied."""
+    for option in getattr(query, "options", []):
+        try:
+            data = getattr(option, "data", b"")
+            if isinstance(data, bytes) and data.startswith(b"{"):
+                parsed = json.loads(data.decode("utf-8"))
+                if isinstance(parsed, dict):
+                    if "deviceId" not in parsed:
+                        parsed["deviceId"] = client
+                    return parsed
+        except Exception:
+            pass
+    return None
+
+
 def cpu_percent() -> float:
     return float(psutil.Process().cpu_percent(interval=None))
 
@@ -145,6 +210,10 @@ async def process_query(
         except dns.exception.DNSException as exc:
             print(f"[DNS] Invalid client DNS message: {exc}", flush=True)
             return b""
+
+        edns_tel = extract_device_telemetry_from_query(query, client)
+        if edns_tel:
+            asyncio.create_task(publish_device_telemetry(session, edns_tel))
 
         if not query.question:
             status = "ERROR"
@@ -305,6 +374,12 @@ async def handle_client(
     try:
         while True:
             query_wire = await read_dns_message(reader)
+            custom_frame = parse_custom_telemetry_frame(query_wire, client)
+            if custom_frame:
+                asyncio.create_task(publish_device_telemetry(session, custom_frame))
+                ack = b'{"status":"accepted"}'
+                await write_dns_message(writer, ack)
+                continue
             response_wire = await process_query(query_wire, session, client)
             if response_wire:
                 await write_dns_message(writer, response_wire)
