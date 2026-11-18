@@ -6,6 +6,7 @@ const path = require('path');
 const { randomUUID } = require('crypto');
 const { Server } = require('socket.io');
 const { createStorage } = require('./lib/storage');
+const { ApnicService } = require('./lib/apnic');
 const {
   validateMetricPayload,
   validateTelemetryPayload,
@@ -50,6 +51,8 @@ const storage = createStorage({
   retentionDays: Number(process.env.RETENTION_DAYS || 30),
   maxBuffer: Number(process.env.MAX_FALLBACK_BUFFER || 2000),
 });
+
+const apnic = new ApnicService();
 
 if (storage.mode === 'mongo') {
   void storage.connect();
@@ -162,6 +165,36 @@ app.get('/api/test-runs', (req, res) => {
   );
 });
 
+app.get('/api/apnic/status', (_req, res) => {
+  try {
+    const status = apnic.getStatus();
+    res.json(status);
+  } catch (err) {
+    console.error('[API] GET /api/apnic/status failed:', err);
+    res.status(500).json({ error: 'Failed to load APNIC status' });
+  }
+});
+
+app.get('/api/apnic/summary', (_req, res) => {
+  try {
+    const summary = apnic.getSummary();
+    res.json(summary);
+  } catch (err) {
+    console.error('[API] GET /api/apnic/summary failed:', err);
+    res.status(500).json({ error: 'Failed to load APNIC summary' });
+  }
+});
+
+app.get('/api/apnic/metadata', (_req, res) => {
+  try {
+    const metadata = apnic.getMetadata();
+    res.json(metadata);
+  } catch (err) {
+    console.error('[API] GET /api/apnic/metadata failed:', err);
+    res.status(500).json({ error: 'Failed to load APNIC metadata' });
+  }
+});
+
 app.post('/api/metrics', (req, res) => {
   const result = validateMetricPayload(req.body);
   if (!result.ok) {
@@ -255,4 +288,4 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`AegisDNS dashboard listening on port ${PORT} (storage=${storage.mode})`);
 });
 
-module.exports = { app, server, io, storage, rejectionCounts };
+module.exports = { app, server, io, storage, rejectionCounts, apnic };

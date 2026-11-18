@@ -149,3 +149,32 @@ test('rejects invalid device telemetry payloads', () => {
     400,
   );
 });
+
+test('returns APNIC status structure', () => {
+  const response = request('GET', '/api/apnic/status');
+  assert.ok(response.body);
+  assert.ok('dataset_serial' in response.body);
+  assert.ok('checksum_verification_status' in response.body);
+  assert.ok('signature_verification_status' in response.body);
+  assert.ok('current_update_status' in response.body);
+});
+
+test('returns APNIC summary structure with type counts', () => {
+  const response = request('GET', '/api/apnic/summary');
+  assert.ok(response.body);
+  assert.ok(typeof response.body.total_records === 'number');
+  assert.ok(typeof response.body.ipv4_count === 'number');
+  assert.ok(typeof response.body.ipv6_count === 'number');
+  assert.ok(typeof response.body.asn_count === 'number');
+  assert.ok(typeof response.body.by_status === 'object');
+  assert.ok(typeof response.body.top_countries === 'object');
+});
+
+test('returns APNIC metadata structure', () => {
+  const response = request('GET', '/api/apnic/metadata');
+  assert.ok(response.body);
+  assert.equal(response.body.dataset_name, 'delegated-apnic-latest');
+  assert.ok('serial_number' in response.body);
+  assert.ok('record_count' in response.body);
+  assert.ok('sha256_fingerprint' in response.body);
+});
