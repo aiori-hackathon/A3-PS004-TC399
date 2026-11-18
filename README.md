@@ -314,19 +314,12 @@ docker compose --env-file .env -f src/docker-compose.yml logs --tail 100 gateway
 docker compose --env-file .env -f src/docker-compose.yml logs --tail 100 dashboard
 ```
 
-<<<<<<< HEAD
--   Dashboard: http://127.0.0.1:3001 (host `3001` → container `3000`).
--   Gateway: TCP port `8853` on the Docker host (mapped to container port `853`).
--   The current Compose configuration binds the dashboard to
-    `127.0.0.1:3001` for local access.
-=======
 -   HTML dashboard: http://localhost:3000
 -   React dashboard: http://localhost:3001
 -   Gateway: TCP port `8853` on the Docker host, forwarded to port `853`
     inside the container.
 -   The HTML dashboard proxies API and Socket.IO requests to the React
     dashboard's shared backend.
->>>>>>> 31d2effdbde2c594661175e3cd35dec1de74526c
 
 Do not expose the resolver or authoritative DNS service publicly.
 

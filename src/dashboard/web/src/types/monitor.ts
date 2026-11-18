@@ -35,3 +35,4 @@ export interface DeviceEvent {
 
 export type FeedStatus = 'connecting' | 'live' | 'offline';
 export type TimeWindow = 'all' | '5m' | '1h';
+export type ApiStatus = 'idle' | 'loading' | 'success' | 'error' | 'online' | 'offline';

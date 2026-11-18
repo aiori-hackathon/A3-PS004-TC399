@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { io } from 'socket.io-client';
-import type { DeviceEvent, FeedStatus, GatewayMetric, GatewayStatus } from '@/types/monitor';
+import type { ApiStatus, DeviceEvent, FeedStatus, GatewayMetric, GatewayStatus } from '@/types/monitor';
 
 const MAX = 2000;
 const FLUSH_MS = 250; // live events are batched so a burst renders once, not per event
@@ -32,6 +32,10 @@ interface Ctx {
   pending: number;
   togglePause: () => void;
   clear: () => void;
+  // --- Added missing properties ---
+  apiStatus: ApiStatus;
+  livePulse: number;
+  metricsError: string | null;
 }
 const C = createContext<Ctx | null>(null);
 
@@ -41,6 +45,12 @@ export function MetricsProvider({ children }: { children: ReactNode }) {
   const [device, setDevice] = useState<DeviceEvent[]>([]);
   const [paused, setPaused] = useState(false);
   const [pending, setPending] = useState(0);
+  
+  // --- Added state for missing properties ---
+  const [apiStatus, setApiStatus] = useState<ApiStatus>('idle');
+  const [livePulse, setLivePulse] = useState<number>(Date.now());
+  const [metricsError, setMetricsError] = useState<string | null>(null);
+
   const pausedRef = useRef(false);
   const buf = useRef<GatewayMetric[]>([]);
   const devBuf = useRef<DeviceEvent[]>([]);
@@ -68,6 +78,7 @@ export function MetricsProvider({ children }: { children: ReactNode }) {
     };
 
     const loadHistory = async () => {
+      setApiStatus('loading');
       try {
         const r = await fetch('/api/metrics', { cache: 'no-store' });
         if (!r.ok) throw new Error(String(r.status));
@@ -75,7 +86,12 @@ export function MetricsProvider({ children }: { children: ReactNode }) {
         if (rec(d) && Array.isArray(d.metrics)) addMetrics(d.metrics.map(toMetric).filter((m): m is GatewayMetric => !!m));
         synced.current = true;
         setFeed('live');
-      } catch { setFeed('offline'); }
+        setApiStatus('success');
+      } catch (err) { 
+        setFeed('offline'); 
+        setApiStatus('error');
+        setMetricsError(err instanceof Error ? err.message : 'Failed to fetch metrics');
+      }
     };
 
     const socket = io({ reconnectionDelayMax: 4000 });
@@ -86,6 +102,8 @@ export function MetricsProvider({ children }: { children: ReactNode }) {
       const x = toMetric(m);
       if (x) buf.current.push({ ...x, live: synced.current });
       if (buf.current.length > 1000) buf.current.shift();
+      // Update pulse on new live metric
+      setLivePulse(Date.now());
     });
     socket.on('device_telemetry', (e: unknown) => { const x = toDevice(e); if (x) devBuf.current.push(x); });
     socket.on('device_telemetry_history', (d: unknown) => {
@@ -108,8 +126,13 @@ export function MetricsProvider({ children }: { children: ReactNode }) {
   }, []);
   const clear = useCallback(() => { setMetrics([]); buf.current = []; setPending(0); }, []);
 
-  const value = useMemo(() => ({ feed, metrics, device, paused, pending, togglePause, clear }),
-    [feed, metrics, device, paused, pending, togglePause, clear]);
+  // Added the new variables to the value object and useMemo dependencies
+  const value = useMemo(() => ({ 
+    feed, metrics, device, paused, pending, togglePause, clear, 
+    apiStatus, livePulse, metricsError 
+  }),
+    [feed, metrics, device, paused, pending, togglePause, clear, apiStatus, livePulse, metricsError]);
+    
   return <C.Provider value={value}>{children}</C.Provider>;
 }
 

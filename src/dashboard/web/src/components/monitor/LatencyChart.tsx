@@ -98,7 +98,7 @@ export function LatencyChart({ metrics }: LatencyChartProps) {
                 fill="#D9CFB4"
                 className="font-mono text-[11px]"
               >
-                {formatShortTime(samples[index].timestamp)}
+                {formatShortTime(samples[index].ts)}
               </text>
             ))}
             <path d={areaPath} fill="url(#latency-fill)" />
@@ -119,7 +119,7 @@ export function LatencyChart({ metrics }: LatencyChartProps) {
 
       <p className="mt-4 min-h-5 font-mono text-xs text-ivory/60" aria-live="polite">
         {activeSample
-          ? `${formatShortTime(activeSample.timestamp)} · ${activeSample.latency_ms.toFixed(2)} ms · ${activeSample.query}`
+          ? `${formatShortTime(activeSample.ts)} · ${activeSample.latency_ms.toFixed(2)} ms · ${activeSample.query}`
           : samples.length ? 'Move across the chart to inspect an individual gateway observation' : 'The chart will populate when the gateway posts DNS metrics.'}
       </p>
     </Panel>

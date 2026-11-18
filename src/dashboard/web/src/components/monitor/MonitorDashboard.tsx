@@ -46,7 +46,7 @@ export function MonitorDashboard() {
             />
             <div className="grid gap-10 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:items-stretch">
               <div className="border border-ivory/10 bg-forest-900/50 p-6 md:p-8">
-                <ValidationPipeline livePulse={livePulse} />
+                <ValidationPipeline livePulse={latestMetric ?? null} />
               </div>
               <LatestVerdict metric={latestMetric} />
             </div>
