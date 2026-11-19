@@ -58,6 +58,23 @@ const edeItemSchema = z.object({
 
 const edeInfoSchema = z.array(edeItemSchema).max(8);
 
+const apnicItemSchema = z.object({
+  status: z.string().max(32).optional(),
+  found: z.boolean().optional(),
+  ip: z.string().max(64).optional(),
+  asn: z.union([z.number(), z.string()]).optional(),
+  registry: z.string().max(32).optional(),
+  country_code: z.string().max(8).optional(),
+  resource_type: z.string().max(16).optional(),
+  allocation_start: z.string().max(64).optional(),
+  allocation_value: z.string().max(64).optional(),
+  allocation_status: z.string().max(32).optional(),
+  allocation_date: z.string().max(32).optional(),
+  error: z.string().max(256).optional(),
+}).passthrough();
+
+const apnicInfoSchema = z.array(apnicItemSchema).max(64);
+
 const metricInputSchema = z.object({
   timestamp: isoTimestampOptional,
   query: z
@@ -81,6 +98,7 @@ const metricInputSchema = z.object({
     .default('')
     .transform((s) => s.slice(0, 64)),
   ede_info: edeInfoSchema.optional(),
+  apnic: apnicInfoSchema.optional(),
 });
 
 const telemetryBaseShape = {
@@ -211,6 +229,9 @@ function validateMetricPayload(input) {
   };
   if (data.ede_info !== undefined) {
     normalized.ede_info = data.ede_info;
+  }
+  if (data.apnic !== undefined) {
+    normalized.apnic = data.apnic;
   }
   return { ok: true, data: normalized };
 }

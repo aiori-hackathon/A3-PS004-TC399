@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('fs');
 const express = require('express');
 const http = require('http');
 const path = require('path');
@@ -85,6 +86,10 @@ app.use((err, req, res, next) => {
   }
   return next(err);
 });
+const webDistPath = path.join(__dirname, 'web', 'dist');
+if (fs.existsSync(webDistPath)) {
+  app.use(express.static(webDistPath));
+}
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/health', (_req, res) => {
@@ -192,6 +197,60 @@ app.get('/api/apnic/metadata', (_req, res) => {
   } catch (err) {
     console.error('[API] GET /api/apnic/metadata failed:', err);
     res.status(500).json({ error: 'Failed to load APNIC metadata' });
+  }
+});
+
+app.get('/api/apnic/lookup', (req, res) => {
+  try {
+    const query = req.query || {};
+    const ip = typeof query.ip === 'string' ? query.ip.trim() : '';
+    const asn = typeof query.asn === 'string' ? query.asn.trim() : '';
+    const generic = (typeof query.resource === 'string' && query.resource.trim())
+      || (typeof query.q === 'string' && query.q.trim())
+      || (req.body && typeof req.body.resource === 'string' && req.body.resource.trim())
+      || '';
+
+    const target = ip || asn || generic;
+    if (!target) {
+      return res.status(400).json({
+        found: false,
+        error: 'Missing required query parameter: provide ?ip=, ?asn=, or ?resource= (e.g. /api/apnic/lookup?ip=103.21.244.0 or /api/apnic/lookup?asn=AS1221)',
+      });
+    }
+
+    const result = apnic.lookupResource(target);
+    res.json(result);
+  } catch (err) {
+    console.error('[API] GET /api/apnic/lookup failed:', err);
+    res.status(500).json({ found: false, error: 'Internal lookup error' });
+  }
+});
+
+app.get('/api/apnic/resources', (req, res) => {
+  try {
+    const query = req.query || {};
+    const country = typeof query.country === 'string' ? query.country.trim() : '';
+    const type = typeof query.type === 'string' ? query.type.trim() : '';
+    const status = typeof query.status === 'string' ? query.status.trim() : '';
+    const page = query.page !== undefined ? query.page : 1;
+    const limit = query.limit !== undefined ? query.limit : 20;
+
+    const result = apnic.getResources({ country, type, status, page, limit });
+    if (result.error && result.error.startsWith('Invalid')) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('[API] GET /api/apnic/resources failed:', err);
+    res.status(500).json({
+      total: 0,
+      page: 1,
+      limit: 20,
+      pages: 0,
+      filters: {},
+      resources: [],
+      error: 'Failed to retrieve APNIC resources',
+    });
   }
 });
 

@@ -34,13 +34,16 @@ export function EventHistory({ metrics }: EventHistoryProps) {
         : metric.status === 'INSECURE' || metric.status === 'BLOCKED_CD'
           ? 'notice'
           : 'info';
+      const apnicSummary = metric.apnic && metric.apnic.length > 0
+        ? ` · APNIC: ${metric.apnic.map((a) => (a.found ? `${a.country_code} (${a.registry})` : 'Non-APNIC')).join(', ')}`
+        : '';
       return {
         id: `gateway-${metric.id}`,
         timestamp: metric.timestamp,
         source: 'gateway',
         severity,
         title: `${statusMeta.label} · ${metric.query}`,
-        detail: `${metric.type} · ${metric.client || 'client not reported'} · ${metric.latency_ms.toFixed(2)} ms gateway latency`,
+        detail: `${metric.type} · ${metric.client || 'client not reported'} · ${metric.latency_ms.toFixed(2)} ms gateway latency${apnicSummary}`,
       };
     });
 

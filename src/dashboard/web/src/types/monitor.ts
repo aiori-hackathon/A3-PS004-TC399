@@ -1,6 +1,21 @@
 export type GatewayStatus = 'SECURE' | 'INSECURE' | 'BOGUS' | 'ERROR' | 'BLOCKED_CD';
 export interface EdeInfo { code: number; text: string }
 
+export interface ApnicEnrichment {
+  status?: string;
+  found?: boolean;
+  ip?: string;
+  asn?: number | string;
+  registry?: string;
+  country_code?: string;
+  resource_type?: string;
+  allocation_start?: string;
+  allocation_value?: string;
+  allocation_status?: string;
+  allocation_date?: string;
+  error?: string;
+}
+
 export interface GatewayMetric {
   id: string;
   timestamp: string;
@@ -12,6 +27,7 @@ export interface GatewayMetric {
   client: string;
   deviceId?: string;
   ede_info?: EdeInfo[];
+  apnic?: ApnicEnrichment[];
   /** Parsed timestamp (client side). */
   ts: number;
   /** True when received live after the initial history load (used for the row flash). */

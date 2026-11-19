@@ -41,6 +41,36 @@ export function LatestVerdict({ metric }: LatestVerdictProps) {
         </p>
       </blockquote>
 
+      {metric.apnic && metric.apnic.length > 0 && (
+        <div className="mt-6 rounded border border-ivory/10 bg-ivory/5 p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-ivory/50">
+              APNIC Allocation Intelligence
+            </span>
+            <span className="font-mono text-[9px] uppercase tracking-wider text-emerald-400">
+              Supplementary
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {metric.apnic.map((item, idx) => (
+              <div key={idx} className="flex items-center justify-between text-xs">
+                <span className="font-mono text-ivory/90">{item.ip || item.asn}</span>
+                {item.found ? (
+                  <span className="font-mono text-emerald-300">
+                    {item.country_code} · {item.registry} ({item.allocation_status || 'allocated'})
+                  </span>
+                ) : (
+                  <span className="font-mono text-ivory/40">Non-APNIC / Unmatched</span>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-ivory/40 italic pt-1 border-t border-ivory/10">
+            * Country codes denote administrative allocation in delegated-apnic-latest, not physical server geolocation.
+          </p>
+        </div>
+      )}
+
       <dl className="mt-auto grid grid-cols-2 gap-px bg-ivory/10 pt-8">
         <div className="bg-forest-900 py-4 pr-4">
           <dt className="font-mono text-[10px] uppercase tracking-[0.16em] text-ivory/45">Gateway latency</dt>

@@ -44,12 +44,12 @@ try {
   Module._load = originalLoad;
 }
 
-function request(method, pathname, body) {
+function request(method, pathname, body, query) {
   const result = {};
   const handler = routes.get(`${method} ${pathname}`);
   assert.ok(handler, `missing route ${method} ${pathname}`);
   handler(
-    { body },
+    { body, query },
     {
       status(code) {
         result.status = code;
@@ -177,4 +177,53 @@ test('returns APNIC metadata structure', () => {
   assert.ok('serial_number' in response.body);
   assert.ok('record_count' in response.body);
   assert.ok('sha256_fingerprint' in response.body);
+});
+
+test('returns APNIC lookup results via GET /api/apnic/lookup', () => {
+  const response = request('GET', '/api/apnic/lookup', null, { resource: '103.21.244.0' });
+  assert.ok(response.body);
+  assert.equal(response.body.found, true);
+  assert.equal(response.body.country_code, 'US');
+
+  // Specific ?ip= query
+  const resIp = request('GET', '/api/apnic/lookup', null, { ip: '103.21.244.0' });
+  assert.ok(resIp.body);
+  assert.equal(resIp.body.found, true);
+  assert.equal(resIp.body.resource_type, 'ipv4');
+
+  // Specific ?asn= query
+  const resAsn = request('GET', '/api/apnic/lookup', null, { asn: 'AS1221' });
+  assert.ok(resAsn.body);
+  assert.equal(resAsn.body.found, true);
+  assert.equal(resAsn.body.country_code, 'AU');
+
+  const missing = request('GET', '/api/apnic/lookup', null, {});
+  assert.equal(missing.status, 400);
+});
+
+test('returns APNIC paginated and filtered resources via GET /api/apnic/resources', () => {
+  const resAll = request('GET', '/api/apnic/resources', null, { page: '1', limit: '10' });
+  assert.ok(resAll.body);
+  assert.equal(resAll.body.page, 1);
+  assert.equal(resAll.body.limit, 10);
+  assert.ok(resAll.body.total > 0);
+  assert.equal(resAll.body.resources.length, 10);
+
+  // Filter by country
+  const resAu = request('GET', '/api/apnic/resources', null, { country: 'AU', limit: '5' });
+  assert.ok(resAu.body.total > 0);
+  assert.equal(resAu.body.resources.length, 5);
+  for (const r of resAu.body.resources) {
+    assert.equal(r.country_code, 'AU');
+  }
+
+  // Filter by type
+  const resIpv6 = request('GET', '/api/apnic/resources', null, { type: 'ipv6', limit: '5' });
+  for (const r of resIpv6.body.resources) {
+    assert.equal(r.resource_type, 'ipv6');
+  }
+
+  // Invalid filter returns 400
+  const resInvalid = request('GET', '/api/apnic/resources', null, { country: 'INVALID' });
+  assert.equal(resInvalid.status, 400);
 });
