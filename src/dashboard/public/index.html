@@ -260,6 +260,7 @@
           <dt>Received</dt><dd id="factTime">–</dd>
           <dt id="factEdeLabel" hidden>Resolver EDE</dt><dd id="factEde" hidden>–</dd>
           <dt id="factClientLabel" hidden>Device</dt><dd id="factClient" hidden>–</dd>
+          <dt id="factApnicLabel" hidden>APNIC Info</dt><dd id="factApnic" hidden>–</dd>
         </dl>
       </article>
     </div>
@@ -407,6 +408,17 @@
           <dt>Last Error</dt><dd id="apnicLastError" style="color:var(--failed);">None</dd>
         </dl>
       </article>
+
+      <!-- APNIC Resource Explorer Card -->
+      <article class="apnic-card" style="grid-column: 1 / -1;">
+        <h3>APNIC Resource Explorer <span class="apnic-badge badge-verified">Read-Only Search</span></h3>
+        <p style="font-size:13px; color:var(--ink-2); margin:0 0 12px;">Query local APNIC allocated IPv4, IPv6, or ASN delegations.</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <input id="apnicLookupInput" class="search" style="flex:1; min-width:220px;" type="text" placeholder="e.g. 103.21.244.0, 2404:6800::, AS1221">
+          <button id="apnicLookupBtn" class="btn" type="button">Lookup</button>
+        </div>
+        <div id="apnicLookupResult" style="margin-top:12px; font-size:13px; color:var(--ink-2);" hidden></div>
+      </article>
     </div>
   </section>
 
@@ -486,6 +498,7 @@
       edeInfo: Array.isArray(raw.ede_info) ? raw.ede_info
         .filter(ede => ede && Number.isInteger(ede.code) && typeof ede.text === 'string')
         .slice(0, 8).map(ede => ({ code: ede.code, text: ede.text.slice(0, 256) })) : [],
+      apnic: Array.isArray(raw.apnic) ? raw.apnic : [],
       client: typeof raw.client === 'string' ? raw.client.slice(0, 64) : ''
     };
   }
@@ -696,6 +709,12 @@
     const hasClient = !!e.client;
     $('factClientLabel').hidden = !hasClient; $('factClient').hidden = !hasClient;
     if (hasClient) $('factClient').textContent = e.client;
+
+    const hasApnic = Array.isArray(e.apnic) && e.apnic.length > 0;
+    $('factApnicLabel').hidden = !hasApnic; $('factApnic').hidden = !hasApnic;
+    if (hasApnic) {
+      $('factApnic').textContent = e.apnic.map(a => a.found ? `${a.country_code} · ${a.registry}` : 'Non-APNIC').join(', ');
+    }
   }
 
   /* ---------- tally ---------- */
@@ -1018,6 +1037,32 @@
     el.textContent = text;
     el.className = `apnic-badge badge-${state}`;
   }
+
+  /* ---------- APNIC explorer lookup ---------- */
+  $('apnicLookupBtn')?.addEventListener('click', async () => {
+    const val = $('apnicLookupInput').value.trim();
+    if (!val) return;
+    const resEl = $('apnicLookupResult');
+    resEl.hidden = false;
+    resEl.textContent = 'Querying APNIC database...';
+    try {
+      const res = await fetch(`/api/apnic/lookup?resource=${encodeURIComponent(val)}`);
+      const data = await res.json();
+      if (data.found) {
+        resEl.innerHTML = `<b style="color:var(--verified)">Found in APNIC Allocations:</b> <code>${data.query}</code> &rarr; <b>${data.country_code}</b> · ${data.registry} | Range: <code>${data.range}</code> | Status: <b>${data.status}</b> | Date: ${data.date} <br><small style="color:var(--ink-3)">* Country code reflects administrative allocation in delegated-apnic-latest, not physical server geolocation.</small>`;
+      } else {
+        resEl.innerHTML = `<span style="color:var(--failed)">${data.error || data.message || 'Resource not found in APNIC registry.'}</span>`;
+      }
+    } catch (e) {
+      resEl.textContent = 'Lookup request failed: ' + e.message;
+    }
+  });
+
+  $('apnicLookupInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      $('apnicLookupBtn')?.click();
+    }
+  });
 
   /* ---------- clock ---------- */
   function tick() {

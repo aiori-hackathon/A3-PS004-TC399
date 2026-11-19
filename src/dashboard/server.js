@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('fs');
 const express = require('express');
 const http = require('http');
 const path = require('path');
@@ -85,6 +86,10 @@ app.use((err, req, res, next) => {
   }
   return next(err);
 });
+const webDistPath = path.join(__dirname, 'web', 'dist');
+if (fs.existsSync(webDistPath)) {
+  app.use(express.static(webDistPath));
+}
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/health', (_req, res) => {
@@ -192,6 +197,23 @@ app.get('/api/apnic/metadata', (_req, res) => {
   } catch (err) {
     console.error('[API] GET /api/apnic/metadata failed:', err);
     res.status(500).json({ error: 'Failed to load APNIC metadata' });
+  }
+});
+
+app.get('/api/apnic/lookup', (req, res) => {
+  try {
+    const resource = (req.query && (req.query.resource || req.query.q)) || (req.body && req.body.resource) || '';
+    if (!resource || typeof resource !== 'string' || !resource.trim()) {
+      return res.status(400).json({
+        found: false,
+        error: 'Missing required query parameter "resource" (e.g. /api/apnic/lookup?resource=103.21.244.0)',
+      });
+    }
+    const result = apnic.lookupResource(resource);
+    res.json(result);
+  } catch (err) {
+    console.error('[API] GET /api/apnic/lookup failed:', err);
+    res.status(500).json({ found: false, error: 'Internal lookup error' });
   }
 });
 

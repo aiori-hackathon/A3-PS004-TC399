@@ -44,12 +44,12 @@ try {
   Module._load = originalLoad;
 }
 
-function request(method, pathname, body) {
+function request(method, pathname, body, query) {
   const result = {};
   const handler = routes.get(`${method} ${pathname}`);
   assert.ok(handler, `missing route ${method} ${pathname}`);
   handler(
-    { body },
+    { body, query },
     {
       status(code) {
         result.status = code;
@@ -155,4 +155,14 @@ test('returns APNIC metadata structure', () => {
   assert.ok('serial_number' in response.body);
   assert.ok('record_count' in response.body);
   assert.ok('sha256_fingerprint' in response.body);
+});
+
+test('returns APNIC lookup results via GET /api/apnic/lookup', () => {
+  const response = request('GET', '/api/apnic/lookup', null, { resource: '103.21.244.0' });
+  assert.ok(response.body);
+  assert.equal(response.body.found, true);
+  assert.equal(response.body.country_code, 'US');
+
+  const missing = request('GET', '/api/apnic/lookup', null, {});
+  assert.equal(missing.status, 400);
 });
