@@ -104,26 +104,55 @@ class NetworkIntelligenceTests(unittest.TestCase):
         self.assertFalse(res["found"])
 
     def test_dns_message_enrichment_does_not_alter_response_or_verdict(self):
-        # Create a mock DNS response with A record
-        query = dns.message.make_query("test.aegis.test.", "A")
+        # Create a mock DNS response with A and AAAA records, and AD bit set
+        query = dns.message.make_query("secure.aegis.test.", "A")
         response = dns.message.make_response(query)
+        response.flags |= dns.flags.AD  # DNSSEC validated
         response.answer.append(
-            dns.rrset.from_text("test.aegis.test.", 60, "IN", "A", "1.0.0.1")
+            dns.rrset.from_text("secure.aegis.test.", 60, "IN", "A", "1.0.0.1")
         )
-        original_flags = response.flags
-        original_rcode = response.rcode()
-        original_answer_len = len(response.answer)
+        response.answer.append(
+            dns.rrset.from_text("secure.aegis.test.", 60, "IN", "AAAA", "2001:200:1000::1")
+        )
+
+        wire_before = response.to_wire()
+        ad_bit_before = bool(response.flags & dns.flags.AD)
+        rcode_before = response.rcode()
 
         enrichments = self.intel.extract_answers_and_enrich(response)
-        self.assertEqual(len(enrichments), 1)
+        self.assertEqual(len(enrichments), 2)
         self.assertTrue(enrichments[0]["found"])
         self.assertEqual(enrichments[0]["country_code"], "AU")
+        self.assertTrue(enrichments[1]["found"])
+        self.assertEqual(enrichments[1]["country_code"], "JP")
 
-        # Verify DNS message is 100% UNTOUCHED
-        self.assertEqual(response.flags, original_flags)
-        self.assertEqual(response.rcode(), original_rcode)
-        self.assertEqual(len(response.answer), original_answer_len)
-        self.assertEqual(response.answer[0][0].address, "1.0.0.1")
+        # Verify DNS message wire format, AD bit, and rcode are 100% byte-for-byte IDENTICAL
+        self.assertEqual(response.to_wire(), wire_before)
+        self.assertEqual(bool(response.flags & dns.flags.AD), ad_bit_before)
+        self.assertTrue(bool(response.flags & dns.flags.AD))
+        self.assertEqual(response.rcode(), rcode_before)
+
+    def test_enrichment_when_db_missing_preserves_wire_and_does_not_raise(self):
+        non_existent = Path(self.temp_dir.name) / "missing_gateway.db"
+        intel_missing = NetworkIntelligence(db_path=non_existent)
+        self.assertFalse(intel_missing.is_available())
+
+        query = dns.message.make_query("secure.aegis.test.", "A")
+        response = dns.message.make_response(query)
+        response.flags |= dns.flags.AD
+        response.answer.append(
+            dns.rrset.from_text("secure.aegis.test.", 60, "IN", "A", "1.0.0.1")
+        )
+
+        wire_before = response.to_wire()
+        enrichments = intel_missing.extract_answers_and_enrich(response)
+
+        # Returns graceful unavailable status without failing or mutating wire
+        self.assertEqual(len(enrichments), 1)
+        self.assertEqual(enrichments[0]["status"], "unavailable")
+        self.assertFalse(enrichments[0]["found"])
+        self.assertEqual(response.to_wire(), wire_before)
+        self.assertTrue(bool(response.flags & dns.flags.AD))
 
 
 if __name__ == "__main__":

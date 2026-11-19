@@ -1,5 +1,5 @@
 import { useMetrics } from '@/context/MetricsContext';
-import { NetworkIntelligenceSuite } from '@/components/monitor/NetworkIntelligenceSuite';
+import { ApnicDashboardSection } from '@/components/monitor/ApnicDashboardSection';
 import { EventHistory } from '@/components/monitor/EventHistory';
 import { LatencyChart } from '@/components/monitor/LatencyChart';
 import { LatestVerdict } from '@/components/monitor/LatestVerdict';
@@ -82,11 +82,11 @@ export function MonitorDashboard() {
           <section id="apnic" className="scroll-mt-24 space-y-10">
             <SectionHeader
               index="05"
-              eyebrow="Network intelligence suite"
-              title="Official delegated resource allocations & network intelligence"
+              eyebrow="APNIC Network Intelligence"
+              title="Official Delegated Resource Allocations & Explorer"
               description="Ingested on a 24-hour cycle from APNIC. This data provides supplementary intelligence to the gateway and dashboard and is strictly decoupled from the DNSSEC validation chain."
             />
-            <NetworkIntelligenceSuite />
+            <ApnicDashboardSection />
           </section>
         </Reveal>
 

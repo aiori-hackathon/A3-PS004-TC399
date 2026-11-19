@@ -119,3 +119,77 @@ test('APNIC summary includes full country percentage breakdown', () => {
     assert.ok(summary.countries[i - 1].count >= summary.countries[i].count);
   }
 });
+
+test('APNIC lookup returns dataset_serial when metadata exists', () => {
+  const res = apnic.lookupResource('103.21.244.0');
+  assert.equal(res.found, true);
+  assert.ok(res.dataset_serial);
+});
+
+test('APNIC getResources: default pagination', () => {
+  const res = apnic.getResources({ page: 1, limit: 10 });
+  assert.equal(res.page, 1);
+  assert.equal(res.limit, 10);
+  assert.ok(res.total > 80000);
+  assert.equal(res.resources.length, 10);
+  assert.ok(res.resources[0].range);
+  assert.ok(res.resources[0].dataset_serial);
+});
+
+test('APNIC getResources: filters by country code', () => {
+  const res = apnic.getResources({ country: 'AU', limit: 15 });
+  assert.ok(res.total > 0);
+  assert.equal(res.resources.length, 15);
+  for (const r of res.resources) {
+    assert.equal(r.country_code, 'AU');
+  }
+});
+
+test('APNIC getResources: filters by resource type', () => {
+  const resIpv4 = apnic.getResources({ type: 'ipv4', limit: 5 });
+  for (const r of resIpv4.resources) {
+    assert.equal(r.resource_type, 'ipv4');
+  }
+
+  const resIpv6 = apnic.getResources({ type: 'ipv6', limit: 5 });
+  for (const r of resIpv6.resources) {
+    assert.equal(r.resource_type, 'ipv6');
+  }
+
+  const resAsn = apnic.getResources({ type: 'asn', limit: 5 });
+  for (const r of resAsn.resources) {
+    assert.equal(r.resource_type, 'asn');
+  }
+});
+
+test('APNIC getResources: filters by allocation status', () => {
+  const res = apnic.getResources({ status: 'allocated', limit: 10 });
+  for (const r of res.resources) {
+    assert.equal(r.status, 'allocated');
+  }
+});
+
+test('APNIC getResources: page offsets change records', () => {
+  const p1 = apnic.getResources({ page: 1, limit: 5 });
+  const p2 = apnic.getResources({ page: 2, limit: 5 });
+  assert.equal(p1.resources.length, 5);
+  assert.equal(p2.resources.length, 5);
+  assert.notEqual(p1.resources[0].id, p2.resources[0].id);
+});
+
+test('APNIC getResources: rejects invalid filter values gracefully', () => {
+  const badCc = apnic.getResources({ country: 'INVALID_CC' });
+  assert.ok(badCc.error);
+  assert.equal(badCc.resources.length, 0);
+
+  const badType = apnic.getResources({ type: 'dns_record' });
+  assert.ok(badType.error);
+  assert.equal(badType.resources.length, 0);
+});
+
+test('APNIC getResources: handles missing database gracefully', () => {
+  const missing = new ApnicService({ dbPath: '/tmp/nonexistent.db' });
+  const res = missing.getResources();
+  assert.equal(res.total, 0);
+  assert.ok(res.error.includes('not available'));
+});

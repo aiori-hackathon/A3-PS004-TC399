@@ -1006,12 +1006,213 @@ If `APNIC_GPG_FINGERPRINT` is left unset, the system fails safely and marks sign
 - **Failure Recovery:** If a download, checksum, signature, parsing, or insertion step fails, the transaction rolls back, `resources_staging` is discarded, the failure is recorded in `sync_status.json`, and **the previous known-good database remains active and untouched**.
 
 ### 9. Dashboard API Endpoints
-All endpoints are read-only and query local SQLite storage:
-- `GET /api/apnic/status`: Returns current dataset serial, last successful import timestamp, last update attempt, checksum and signature verification states, and last error.
-- `GET /api/apnic/summary`: Returns record counts (`total_records`, `ipv4_count`, `ipv6_count`, `asn_count`), status distribution, and top allocated country codes.
-- `GET /api/apnic/metadata`: Returns dataset name, serial, start/end date range, record count, SHA-256 provenance fingerprint, and source filename.
+All APNIC endpoints are strictly read-only (`mode=ro`), use parameterized SQL queries, and query the local SQLite database without blocking gateway operations or DNS resolution.
 
-### 10. Docker Deployment
+#### 1. System Status
+`GET /api/apnic/status`
+Returns the current updater health, dataset serial, synchronization timestamps, and cryptographic verification states.
+```json
+{
+  "available": true,
+  "updater_status": "SUCCESS",
+  "dataset_serial": "20261119",
+  "total_records": 89809,
+  "last_successful_import": "2026-11-19T02:08:42.123456Z",
+  "last_attempt": "2026-11-19T02:08:42.123456Z",
+  "checksum_verification": "VERIFIED",
+  "signature_verification": "PENDING_KEY_CONFIGURATION",
+  "trusted_fingerprint_configured": false,
+  "last_error": null
+}
+```
+
+#### 2. Resource Summary & Distribution
+`GET /api/apnic/summary`
+Returns aggregate statistics, counts by resource type (`ipv4`, `ipv6`, `asn`), allocation status breakdown (`allocated`, `assigned`), and country allocation distributions with percentage shares.
+```json
+{
+  "total_records": 89809,
+  "by_type": {
+    "ipv4": 58433,
+    "ipv6": 17350,
+    "asn": 14026
+  },
+  "by_status": {
+    "allocated": 52622,
+    "assigned": 37187
+  },
+  "by_country": [
+    { "country_code": "AU", "count": 14494, "percentage": 16.14 },
+    { "country_code": "IN", "count": 13293, "percentage": 14.8 },
+    { "country_code": "CN", "count": 11447, "percentage": 12.75 },
+    { "country_code": "ID", "count": 9869, "percentage": 10.99 },
+    { "country_code": "BD", "count": 6083, "percentage": 6.77 }
+  ],
+  "dataset_serial": "20261119"
+}
+```
+
+#### 3. Dataset Provenance Metadata
+`GET /api/apnic/metadata`
+Returns formal provenance metadata from the RIR dataset header, including start/end date ranges and the cryptographic SHA-256 provenance fingerprint of the ingested dataset.
+```json
+{
+  "dataset_name": "delegated-apnic-latest",
+  "dataset_serial": "20261119",
+  "start_date": "19830613",
+  "end_date": "20261118",
+  "record_count": 89809,
+  "sha256": "3cb0179d6fe78f56644fcfc142b7dd10be2aa17cba55fec549ec3d81b896f642",
+  "source": "ftp://ftp.apnic.net/stats/apnic/delegated-apnic-latest"
+}
+```
+
+#### 4. Targeted Resource Lookup (IP & ASN)
+`GET /api/apnic/lookup?ip=<ip_address>` or `GET /api/apnic/lookup?asn=<asn>`
+Performs high-performance B-Tree indexed containment searches against the 89,809 records.
+- For IPv4: Normalised 10-digit decimal comparison (`start_num <= ? AND end_num >= ?`).
+- For IPv6: Exact 128-bit hexadecimal 32-character boundary comparison.
+- For ASN: Integer range search handling both bare integers (`4608`) and prefixed strings (`AS4608`).
+
+**Example: IPv4 Lookup (`/api/apnic/lookup?ip=1.0.0.1`)**
+```json
+{
+  "found": true,
+  "query": "1.0.0.1",
+  "type": "ipv4",
+  "resource": {
+    "registry": "apnic",
+    "country_code": "AU",
+    "resource_type": "ipv4",
+    "start": "1.0.0.0",
+    "value": "256",
+    "date": "20110811",
+    "status": "assigned",
+    "range": "1.0.0.0 - 1.0.0.255",
+    "dataset_serial": "20261119"
+  }
+}
+```
+
+**Example: IPv6 Lookup (`/api/apnic/lookup?ip=2001:200::1`)**
+```json
+{
+  "found": true,
+  "query": "2001:200::1",
+  "type": "ipv6",
+  "resource": {
+    "registry": "apnic",
+    "country_code": "JP",
+    "resource_type": "ipv6",
+    "start": "2001:200::",
+    "value": "35",
+    "date": "19990813",
+    "status": "allocated",
+    "range": "2001:200::/35",
+    "dataset_serial": "20261119"
+  }
+}
+```
+
+**Example: ASN Lookup (`/api/apnic/lookup?asn=AS4608` or `?asn=4608`)**
+```json
+{
+  "found": true,
+  "query": "AS4608",
+  "type": "asn",
+  "resource": {
+    "registry": "apnic",
+    "country_code": "AU",
+    "resource_type": "asn",
+    "start": "4608",
+    "value": "1",
+    "date": "19950220",
+    "status": "allocated",
+    "range": "AS4608",
+    "dataset_serial": "20261119"
+  }
+}
+```
+
+**Example: Non-APNIC or Unallocated Resource (`/api/apnic/lookup?ip=8.8.8.8`)**
+```json
+{
+  "found": false,
+  "query": "8.8.8.8",
+  "type": "ipv4",
+  "message": "Resource is outside APNIC regional allocations or unallocated"
+}
+```
+
+#### 5. Filterable Resource Directory
+`GET /api/apnic/resources?country=AU&type=ipv4&status=assigned&page=1&limit=20`
+Provides server-side paginated and indexed browsing across the entire APNIC delegated-resource inventory.
+- Parameters:
+  - `country`: 2-letter uppercase ISO country code (e.g. `AU`, `IN`, `JP`, `CN`).
+  - `type`: `ipv4`, `ipv6`, or `asn`.
+  - `status`: `allocated` or `assigned`.
+  - `page`: 1-based page index (default: `1`).
+  - `limit`: page size between `1` and `100` (default: `20`).
+- Returns:
+```json
+{
+  "total": 12450,
+  "page": 1,
+  "limit": 20,
+  "total_pages": 623,
+  "data": [
+    {
+      "registry": "apnic",
+      "country_code": "AU",
+      "resource_type": "ipv4",
+      "start": "1.0.0.0",
+      "value": "256",
+      "date": "20110811",
+      "status": "assigned",
+      "range": "1.0.0.0 - 1.0.0.255"
+    }
+  ]
+}
+```
+
+### 10. Dashboard Navigation & UI Components
+The AegisDNS web dashboard (`http://127.0.0.1:3001`) integrates APNIC network intelligence across both macro-level allocation views and query-level live telemetry:
+
+#### 1. APNIC Network Intelligence Tab Container
+The primary APNIC section is divided into two focused views:
+- **Allocation Overview & Verification:**
+  - **KPI Metric Cards:** Displays Total Resource Records (`89,809`), IPv4 allocations (`58,433`), IPv6 allocations (`17,350`), ASN allocations (`14,026`), active dataset serial (`20261119`), and synchronization freshness.
+  - **Dataset Health & Verification Panel:** Surfaces daemon health (`IDLE`, `RUNNING`, `SUCCESS`, `STALE`), MD5 checksum status (`VERIFIED` / `FAILED`), detached OpenPGP signature status (`VERIFIED` / `PENDING_KEY_CONFIGURATION` / `FAILED`), trusted fingerprint presence, and error logs.
+  - **Resource Breakdown Visualizations:** Interactive segmented distribution bars for Resource Types (IPv4 vs IPv6 vs ASN) and Allocation Status (Allocated vs Assigned).
+  - **Country Allocation Directory Table:** Sortable and searchable table of all participating ISO country codes, displaying record counts, percentage shares, and an explicit disclaimer distinguishing record counts from raw IP counts.
+- **Resource Explorer & Directory:**
+  - **Interactive Targeted Inspector:** Dedicated search bar supporting IPv4 addresses (`1.0.0.1`), IPv6 addresses (`2001:200::1`), and ASNs (`AS4608`). Displays structured badge details: Registry, Country Code, Resource Range, Allocation Status, Date, and Dataset Serial.
+  - **Delegation Directory Table:** Server-side paginated browsing tool featuring multi-criteria filter dropdowns for Resource Type, Allocation Status, and Country Code, complete with previous/next page controls and empty-state handling.
+
+#### 2. Live DNS Event Enrichment
+When DNS queries resolve to A or AAAA records, the gateway extracts answer IP addresses and cross-references them against the local APNIC database:
+- **DNS Query Table:** Dedicated "APNIC Intelligence" column displaying allocation badges with country code, allocation status, and tooltip range details.
+- **Latest Verdict Panel:** Displays supplementary APNIC allocation metadata alongside the DNSSEC verdict, explicitly isolated by a geolocation disclaimer.
+- **Event History:** Enriched with administrative allocation context without mutating log severity or DNSSEC resolution timestamps.
+
+### 11. Verification Status Definitions
+| Status | Context | Technical Meaning |
+|---|---|---|
+| `VERIFIED` | Checksum / PGP | The MD5 digest matches the official `.md5` sidecar, or the detached OpenPGP `.asc` signature was successfully validated by GnuPG using an operator-configured trusted public key. |
+| `PENDING_KEY_CONFIGURATION` | Signature | The system safely bypassed GPG signature verification because `APNIC_GPG_FINGERPRINT` is unconfigured. Untrusted keys are never automatically trusted. |
+| `FAILED` | Checksum / Signature / Sync | MD5 digest mismatch, invalid cryptographic signature, or schema staging verification failure. The transaction was rolled back and previous known-good data preserved. |
+| `IDLE` | Updater Daemon | The daemon is healthy, initialized, and currently sleeping between its 24-hour scheduled update intervals. |
+| `RUNNING` | Updater Daemon | The download, verification, parsing, or atomic database swap is actively executing. |
+| `STALE` | Dataset Freshness | The dataset's age exceeds the 24-hour update interval (e.g. prolonged network partition or repeated download failure). |
+
+### 12. Important Operational Notice: Allocations vs Geolocation
+> [!IMPORTANT]
+> **APNIC delegated statistics describe administrative resource allocation and assignment records. They are not a live DNS feed, a live BGP routing table, or a guaranteed physical geolocation source.**
+> - **Administrative Country Code:** A country code (e.g., `AU`, `IN`, `CN`) signifies the national jurisdiction of the organization to which APNIC assigned the address block. It does **not** prove that the physical server hosting the domain is located within that country.
+> - **Record Counts vs IP Address Counts:** Record count refers to the number of entries in `delegated-apnic-latest`. In IPv4, `value` denotes individual address count (e.g. `256` for `/24`). In IPv6, `value` denotes the **CIDR prefix length** (e.g. `32` for `/32`, which represents $2^{96}$ addresses). Comparing IPv4 and IPv6 record counts does not reflect relative address pool sizes.
+> - **Strict DNSSEC Independence:** APNIC network intelligence is strictly supplementary. It **never** influences DNSSEC verdict classification (`SECURE`, `INSECURE`, `BOGUS`), does **not** alter the Authenticated Data (`AD`) bit or wire format returned to the IoT client, and never blocks resolution if SQLite is unavailable.
+
+### 13. Docker Deployment
 In `src/docker-compose.yml`, an isolated `apnic-updater` container is added to `aegis_net`:
 - `apnic-updater`: mounts `../data/apnic:/data/apnic` (read-write), runs the Python updater daemon, and executes GPG signature checks.
 - `gateway` & `dashboard`: mount `../data/apnic:/data/apnic:ro` (strictly read-only).
@@ -1051,24 +1252,29 @@ the downloaded bytes against the APNIC sidecar; it does not authenticate the
 publisher. Do not describe the active dataset as PGP-authenticated until the
 operator-configured trust chain verifies its detached signature.
 
-### 11. Automated Testing Instructions
-Run the entire regression and unit test suite across Python and Node.js:
+### 14. Automated Testing Instructions
+Run the APNIC regression and unit test suites across Python and Node.js:
 ```powershell
-python tests/run_tests.py
+# Python APNIC test suite
+python -m unittest tests/test_apnic_database.py tests/test_apnic_parser.py tests/test_apnic_verifier.py tests/test_apnic_updater.py tests/test_network_intelligence.py
+
+# Node.js dashboard, API, and APNIC lookup test suite
+node --test tests/test_apnic_lookup.js tests/test_dashboard.js tests/test_storage.js tests/test_validation.js
 ```
 This executes:
 - `test_apnic_parser.py`: header, IPv4/IPv6/ASN range calculations, comment filtering, extensions, and malformed record validation.
 - `test_apnic_verifier.py`: MD5 verification, missing fingerprint safety, untrusted key rejection, and signature verification.
 - `test_apnic_database.py`: schema creation, staging imports, IPv4/IPv6/ASN lookups, metadata retrieval, and rollback safety.
 - `test_apnic_updater.py`: initial sync, unchanged dataset detection, network failures, checksum failures, and parse errors.
-- `test_network_intelligence.py`: gateway lookups, unknown IP handling, missing database resilience, and DNS message preservation.
-- `test_dashboard.js`: `/api/apnic/status`, `/api/apnic/summary`, `/api/apnic/metadata` responses.
+- `test_network_intelligence.py`: gateway lookups, unknown IP handling, missing database resilience, wire format preservation, and strict AD bit/verdict independence.
+- `test_apnic_lookup.js`: 20 unit tests covering IPv4 range queries, IPv6 128-bit prefix matching, ASN prefix and integer parsing, non-APNIC containment rejection, SQL injection immunity, paginated resource directory queries with limit bounds, filter validation, and missing database safety.
+- `test_dashboard.js`: `/api/apnic/status`, `/api/apnic/summary`, `/api/apnic/metadata`, `/api/apnic/lookup`, and `/api/apnic/resources` responses.
 
 Verified current test status:
 
-- Python: `61/61` tests passed.
-- Node.js: `18` passed, `1` skipped (live MongoDB integration), `0` failed.
-- The React/Vite dashboard frontend build completed successfully.
+- Python APNIC suite: `37/37` tests passed.
+- Node.js suite: `40` passed, `1` skipped (live MongoDB integration), `0` failed.
+- The React/Vite dashboard frontend build (`npm --prefix src/dashboard/web run build`) completed successfully with zero TypeScript or bundling errors.
 
 Remaining APNIC validation work includes independently verifying and
 configuring APNIC's signing-key fingerprint, confirming a successful detached

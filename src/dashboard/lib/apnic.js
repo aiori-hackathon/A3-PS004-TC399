@@ -66,6 +66,22 @@ class ApnicService {
     }
   }
 
+  _openDb() {
+    if (!this.isDbAvailable()) return null;
+    try {
+      const db = new DatabaseSync(this.dbPath, { readOnly: true });
+      try {
+        db.exec('PRAGMA busy_timeout = 5000;');
+      } catch {
+        // Ignored
+      }
+      return db;
+    } catch (err) {
+      console.warn('[APNIC] Could not open database:', err.message);
+      return null;
+    }
+  }
+
   getStatus() {
     let fileStatus = null;
     if (fs.existsSync(this.statusPath)) {
@@ -78,22 +94,20 @@ class ApnicService {
     }
 
     let dbMetadata = null;
-    if (this.isDbAvailable()) {
+    const db = this._openDb();
+    if (db) {
       try {
-        const db = new DatabaseSync(this.dbPath, { readOnly: true });
-        try {
-          const stmt = db.prepare(`
-            SELECT dataset_serial, imported_at, record_count, sha256, signature_verified
-            FROM dataset_metadata
-            WHERE is_active = 1
-            ORDER BY id DESC LIMIT 1
-          `);
-          dbMetadata = stmt.get();
-        } finally {
-          db.close();
-        }
+        const stmt = db.prepare(`
+          SELECT dataset_serial, imported_at, record_count, sha256, signature_verified
+          FROM dataset_metadata
+          WHERE is_active = 1
+          ORDER BY id DESC LIMIT 1
+        `);
+        dbMetadata = stmt.get();
       } catch (err) {
         console.warn('[APNIC] Failed to read database metadata for status:', err.message);
+      } finally {
+        db.close();
       }
     }
 
@@ -149,12 +163,12 @@ class ApnicService {
       countries: [],
     };
 
-    if (!this.isDbAvailable()) {
+    const db = this._openDb();
+    if (!db) {
       return emptySummary;
     }
 
     try {
-      const db = new DatabaseSync(this.dbPath, { readOnly: true });
       try {
         // Types
         const typeRows = db.prepare(`
@@ -290,7 +304,8 @@ class ApnicService {
       };
     }
 
-    if (!this.isDbAvailable()) {
+    const db = this._openDb();
+    if (!db) {
       return {
         found: false,
         query: parsed.query,
@@ -300,7 +315,6 @@ class ApnicService {
     }
 
     try {
-      const db = new DatabaseSync(this.dbPath, { readOnly: true });
       try {
         const stmt = db.prepare(`
           SELECT id, registry, country_code, resource_type, start, value, date, status, extensions
@@ -329,6 +343,14 @@ class ApnicService {
             : `AS${row.start}`;
         }
 
+        let datasetSerial = null;
+        try {
+          const metaRow = db.prepare('SELECT dataset_serial FROM dataset_metadata WHERE is_active = 1 ORDER BY id DESC LIMIT 1').get();
+          if (metaRow) datasetSerial = metaRow.dataset_serial;
+        } catch {
+          // Metadata read failure is non-fatal
+        }
+
         return {
           found: true,
           query: parsed.query,
@@ -342,6 +364,7 @@ class ApnicService {
           extensions: row.extensions || '',
           range: rangeDescription,
           contained: true,
+          dataset_serial: datasetSerial,
           disclaimer: 'Country code denotes administrative allocation in delegated-apnic-latest, not physical host geolocation.',
         };
       } finally {
@@ -358,6 +381,152 @@ class ApnicService {
     }
   }
 
+  getResources(options = {}) {
+    const defaultResult = {
+      total: 0,
+      page: 1,
+      limit: 20,
+      pages: 0,
+      filters: {},
+      resources: [],
+    };
+
+    if (!this.isDbAvailable()) {
+      return {
+        ...defaultResult,
+        error: 'APNIC intelligence database is not available on this gateway node.',
+      };
+    }
+
+    const rawCountry = typeof options.country === 'string' ? options.country.trim() : '';
+    const rawType = typeof options.type === 'string' ? options.type.trim().toLowerCase() : '';
+    const rawStatus = typeof options.status === 'string' ? options.status.trim().toLowerCase() : '';
+
+    const page = Math.max(1, parseInt(options.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(options.limit, 10) || 20));
+    const offset = (page - 1) * limit;
+
+    const whereClauses = [];
+    const params = [];
+
+    if (rawCountry) {
+      if (/^[a-zA-Z]{2}$/i.test(rawCountry) || rawCountry === '*') {
+        whereClauses.push('country_code = ?');
+        params.push(rawCountry.toUpperCase());
+      } else {
+        return {
+          ...defaultResult,
+          error: `Invalid country code: "${rawCountry.slice(0, 16)}". Expected 2-letter ISO country code.`,
+        };
+      }
+    }
+
+    if (rawType) {
+      if (['ipv4', 'ipv6', 'asn'].includes(rawType)) {
+        whereClauses.push('resource_type = ?');
+        params.push(rawType);
+      } else {
+        return {
+          ...defaultResult,
+          error: `Invalid resource type: "${rawType.slice(0, 16)}". Expected ipv4, ipv6, or asn.`,
+        };
+      }
+    }
+
+    if (rawStatus) {
+      if (['allocated', 'assigned', 'reserved', 'available'].includes(rawStatus)) {
+        whereClauses.push('status = ?');
+        params.push(rawStatus);
+      } else {
+        return {
+          ...defaultResult,
+          error: `Invalid allocation status: "${rawStatus.slice(0, 16)}".`,
+        };
+      }
+    }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const db = this._openDb();
+    if (!db) {
+      return defaultResult;
+    }
+
+    try {
+      try {
+        let datasetSerial = null;
+        try {
+          const metaRow = db.prepare('SELECT dataset_serial FROM dataset_metadata WHERE is_active = 1 ORDER BY id DESC LIMIT 1').get();
+          if (metaRow) datasetSerial = metaRow.dataset_serial;
+        } catch {
+          // Metadata read failure is non-fatal
+        }
+
+        const countStmt = db.prepare(`SELECT COUNT(*) as total FROM resources ${whereSql}`);
+        const countRow = countStmt.get(...params);
+        const total = Number(countRow?.total || 0);
+        const pages = Math.ceil(total / limit) || 1;
+
+        const dataStmt = db.prepare(`
+          SELECT id, registry, country_code, resource_type, start, value, date, status, extensions
+          FROM resources
+          ${whereSql}
+          ORDER BY id ASC
+          LIMIT ? OFFSET ?
+        `);
+        const rows = dataStmt.all(...params, limit, offset);
+
+        const resources = rows.map((row) => {
+          let rangeDescription = row.start;
+          if (row.resource_type === 'ipv4') {
+            rangeDescription = `${row.start} (+${row.value} hosts)`;
+          } else if (row.resource_type === 'ipv6') {
+            rangeDescription = `${row.start}/${row.value} (CIDR prefix length)`;
+          } else if (row.resource_type === 'asn') {
+            rangeDescription = Number(row.value) > 1
+              ? `AS${row.start} - AS${Number(row.start) + Number(row.value) - 1}`
+              : `AS${row.start}`;
+          }
+
+          return {
+            id: Number(row.id),
+            registry: row.registry,
+            country_code: row.country_code,
+            resource_type: row.resource_type,
+            start: row.start,
+            value: row.value,
+            date: row.date,
+            status: row.status,
+            extensions: row.extensions || '',
+            range: rangeDescription,
+            dataset_serial: datasetSerial,
+          };
+        });
+
+        return {
+          total,
+          page,
+          limit,
+          pages,
+          filters: {
+            country: rawCountry ? rawCountry.toUpperCase() : null,
+            type: rawType || null,
+            status: rawStatus || null,
+          },
+          resources,
+        };
+      } finally {
+        db.close();
+      }
+    } catch (err) {
+      console.warn('[APNIC] Failed to fetch resources:', err.message);
+      return {
+        ...defaultResult,
+        error: 'An internal error occurred while querying resources.',
+      };
+    }
+  }
+
   getMetadata() {
     const emptyMeta = {
       dataset_name: 'delegated-apnic-latest',
@@ -370,12 +539,12 @@ class ApnicService {
       source_filename: null,
     };
 
-    if (!this.isDbAvailable()) {
+    const db = this._openDb();
+    if (!db) {
       return emptyMeta;
     }
 
     try {
-      const db = new DatabaseSync(this.dbPath, { readOnly: true });
       try {
         const stmt = db.prepare(`
           SELECT dataset_serial, start_date, end_date, record_count,
